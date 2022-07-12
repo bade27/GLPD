@@ -9,9 +9,9 @@ if __name__ == '__main__':
     machine = platform.system()
     
     if machine == 'Linux':
-        base_dir = "/home/linuxpc/MEGAsyncall_data_tesi/data"
-        copy_before_split = "/home/linuxpc/MEGAsyncall_data_tesi/data_before_split"
-        copy_after_split = "/home/linuxpc/MEGAsyncall_data_tesi/data_after_split"
+        base_dir = "/home/linuxpc/MEGAsync/all_data_tesi/data"
+        copy_before_split = "/home/linuxpc/MEGAsync/all_data_tesi/data_before_split"
+        copy_after_split = "/home/linuxpc/MEGAsync/all_data_tesi/data_after_split"
     else:
         base_dir = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data"
         copy_before_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_before_split"
