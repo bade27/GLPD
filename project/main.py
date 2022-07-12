@@ -18,7 +18,7 @@ if __name__ == '__main__':
         copy_after_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_after_split"
 
     # generate data
-    dataset = Dataset(base_dir)
+    dataset = Dataset(base_dir, random_features=True)
     dataset.set_statistics(
         stats.mode, 
         stats.min, 

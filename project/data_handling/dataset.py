@@ -15,14 +15,17 @@ from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_
 from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, draw_networkx, get_backward_star, get_forward_star, mean_node_degree
 from utils.petri_net_utils import add_places, alpha_relations, build_net_from_places, find_actual_places
 from utils.pm4py_utils import display_petri_net, generate_trees, generate_log, build_petri_net_from_log, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml
+import model.structure as model_structure
 import shutil
 from sklearn.preprocessing import KBinsDiscretizer
 import torch
 
 
 class Dataset():
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, random_features=False):
         self.data_dir = data_dir
+        self.random_features = random_features
+
         self.graphs_dir = os.path.join(self.data_dir, "graphs")
         self.logs_dir = os.path.join(self.graphs_dir, "logs")
         self.raw_dir = os.path.join(self.graphs_dir, "raw")
@@ -230,6 +233,28 @@ class Dataset():
                 torch.save(original_edge_index, os.path.join(self.raw_dir, "original_" + str(i+offset).zfill(pad)))
                 torch.save(target, os.path.join(self.raw_dir, "y_" + str(i+offset).zfill(pad)))
 
+                if self.random_features:
+                    h = torch.max(edge_index)
+                    w = model_structure.num_node_features
+                    no_activities = nodes.index('|')+1
+                    no_places = h.item() - no_activities
+
+                    x_activities = torch.randn((no_activities, w))
+                    x_activities = torch.nn.functional.normalize(x_activities, p=2.0, dim=1)
+
+                    x_places = torch.zeros((no_places, w))
+
+                    x = torch.cat((x_activities, x_places), dim=0)
+
+                    assert x.shape[0] == h
+
+                    torch.save(edge_index, os.path.join(self.raw_dir, "x_" + str(i+offset).zfill(pad)))
+                else:
+                    # assemble tgn data and move it into self.raw_dir with name x
+                    pass
+
+
+
                 nodes_file_name = os.path.join(self.graph_nodes_dir, "nodes_" + str(i+offset).zfill(pad))
                 dump_to_pickle(nodes_file_name, nodes)
 
@@ -265,7 +290,7 @@ class Dataset():
 
         dataset.to_csv(os.path.join(self.data_dir, 'tmp_data.csv'), index=False)
 
-        assert len(os.listdir(self.logs_dir)) * 3 == len(os.listdir(self.raw_dir))
+        assert len(os.listdir(self.logs_dir)) * 4 == len(os.listdir(self.raw_dir))
 
 
     def detect_ill_formed(self):
@@ -440,6 +465,15 @@ class Dataset():
             originals)
 
 
+        xs = [file for file in sorted(os.listdir(os.path.join(self.graphs_dir, 'raw'))) if 'x' in file]
+
+        split_move_files(
+            os.path.join(self.graphs_dir, "raw"),
+            [train_raw_dir,validation_raw_dir,test_raw_dir], 
+            train_graphs, valid_graphs, test_graphs,
+            xs)
+
+
         ys = [file for file in sorted(os.listdir(os.path.join(self.graphs_dir, 'raw'))) if 'y' in file]
 
         split_move_files(
@@ -460,6 +494,10 @@ class Dataset():
         print(f'remaining graphs {len(os.listdir(self.logs_dir))-len(removed)}/{len(os.listdir(self.logs_dir))}')
 
         train_df, valid_df, test_df = self.sample(original_df, graph_stats_df, removed)
+
+        print(f"train samples: {len(train_df['log'].unique())}")
+        print(f"validation samples: {len(valid_df['log'].unique())}")
+        print(f"test samples: {len(test_df['log'].unique())}")
 
         print(f'remaining number of rows {len(train_df)+len(valid_df)+len(test_df)}/{len(original_df)}')
 
