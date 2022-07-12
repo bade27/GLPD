@@ -1,0 +1,13 @@
+mode =  [7, 8, 8] 
+min = [5, 4, 4] 
+max = [10, 15, 15]
+sequence = [0.40, 0.40, 0.40]
+choice = [0.10, 0.32, 0.32]
+parallel = [0.10, 0.20, 0.0]
+loop = [0.0, 0.0, 0.0]
+or_gate = [0.0, 0.0, 0.0]
+silent = [0.0, 0.0, 0.0]
+no_models = 1000
+no_traces = 10
+no_datasets = 3
+no_features = 10
