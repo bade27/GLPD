@@ -1,3 +1,4 @@
+import platform
 import os
 from data_handling.dataset import Dataset
 import data_handling.stats as stats
@@ -5,9 +6,16 @@ from utils.general_utils import copy_dir
 
 
 if __name__ == '__main__':
-    base_dir = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data"
-    copy_before_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_before_split"
-    copy_after_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_after_split"
+    machine = platform.system()
+    
+    if machine == 'Linux':
+        base_dir = "/home/linuxpc/MEGAsyncall_data_tesi/data"
+        copy_before_split = "/home/linuxpc/MEGAsyncall_data_tesi/data_before_split"
+        copy_after_split = "/home/linuxpc/MEGAsyncall_data_tesi/data_after_split"
+    else:
+        base_dir = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data"
+        copy_before_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_before_split"
+        copy_after_split = "D:\\MEGA\\MEGAsync\\all_data_tesi\\data_after_split"
 
     # generate data
     dataset = Dataset(base_dir)
