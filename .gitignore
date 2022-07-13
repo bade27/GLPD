@@ -3,3 +3,5 @@ project/model/structure.py
 project/data_handling/__pycache__/
 project/model/__pycache__/
 project/utils/__pycache__/
+*.pyc
+*.pyc
