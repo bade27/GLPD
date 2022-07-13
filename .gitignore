@@ -5,3 +5,4 @@ project/model/__pycache__/
 project/utils/__pycache__/
 *.pyc
 *.pyc
+data/
