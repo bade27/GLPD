@@ -121,9 +121,9 @@ if __name__ == '__main__':
             if epoch > patience and no_epochs_no_improv == patience:
                 break
             else:
-                torch.save(trainer.model.state_dict(), os.path.join(checkpoints_dir, f"self_supervised_{epoch}.pth"))
+                torch.save(trainer.model.state_dict(), os.path.join(checkpoints_dir, f"self_supervised_{epoch}.pt"))
 
-            trainer.model.load_state_dict(torch.load(os.path.join(checkpoints_dir, f"self_supervised_{best_epoch}.pth")))
+            trainer.model.load_state_dict(torch.load(os.path.join(checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
 
     if do_test:
         model = trainer.model

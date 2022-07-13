@@ -229,9 +229,9 @@ class Dataset():
                 variants = get_variants_parsed(log)
 
                 # save files
-                torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(i+offset).zfill(pad)))
-                torch.save(original_edge_index, os.path.join(self.raw_dir, "original_" + str(i+offset).zfill(pad)))
-                torch.save(target, os.path.join(self.raw_dir, "y_" + str(i+offset).zfill(pad)))
+                torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(i+offset).zfill(pad) + ".pt"))
+                torch.save(original_edge_index, os.path.join(self.raw_dir, "original_" + str(i+offset).zfill(pad) + ".pt"))
+                torch.save(target, os.path.join(self.raw_dir, "y_" + str(i+offset).zfill(pad) + ".pt"))
 
                 if self.random_features:
                     h = torch.max(edge_index)+1
@@ -249,7 +249,7 @@ class Dataset():
                     assert x.shape[0] == h
                     assert x.shape[1] == w
 
-                    torch.save(x, os.path.join(self.raw_dir, "x_" + str(i+offset).zfill(pad)))
+                    torch.save(x, os.path.join(self.raw_dir, "x_" + str(i+offset).zfill(pad) + ".pt"))
                 else:
                     # assemble tgn data and move it into self.raw_dir with name x
                     pass
