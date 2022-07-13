@@ -234,7 +234,7 @@ class Dataset():
                 torch.save(target, os.path.join(self.raw_dir, "y_" + str(i+offset).zfill(pad)))
 
                 if self.random_features:
-                    h = torch.max(edge_index)
+                    h = torch.max(edge_index)+1
                     w = model_structure.num_node_features
                     no_activities = nodes.index('|')+1
                     no_places = h.item() - no_activities
@@ -247,8 +247,9 @@ class Dataset():
                     x = torch.cat((x_activities, x_places), dim=0)
 
                     assert x.shape[0] == h
+                    assert x.shape[1] == w
 
-                    torch.save(edge_index, os.path.join(self.raw_dir, "x_" + str(i+offset).zfill(pad)))
+                    torch.save(x, os.path.join(self.raw_dir, "x_" + str(i+offset).zfill(pad)))
                 else:
                     # assemble tgn data and move it into self.raw_dir with name x
                     pass

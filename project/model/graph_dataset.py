@@ -7,7 +7,7 @@ sys.path.insert(0, path)
 import os
 import torch
 from torch.utils.data import Dataset
-from project.utils.general_utils import load_pickle
+from utils.general_utils import load_pickle
 
 
 
