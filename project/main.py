@@ -150,8 +150,8 @@ if __name__ == '__main__':
         
           name = str(i)
         
-          save_petri_net_to_img(net, im, fm, os.path.join(inference_dir, name))
-          save_petri_net_to_pnml(net, im, fm, os.path.join(inference_dir, name))
+          save_petri_net_to_img(net, im, fm, os.path.join(inference_dir, name + '.png'))
+          save_petri_net_to_pnml(net, im, fm, os.path.join(inference_dir, name + '.pnml'))
         
         print(f'{sound_nets}/{len(test)}')
         print(f'{connected}/{len(test)}')
