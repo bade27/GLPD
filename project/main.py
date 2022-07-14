@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        device = 'cpu'
+        # device = 'cpu'
 
         l_train = len(train)
         ii = [n for n in range(l_train)]
@@ -93,7 +93,7 @@ if __name__ == '__main__':
         best_loss = float('+inf')
         best_epoch = 0
         no_epochs_no_improv = 0
-        patience = 2
+        patience = 5
 
         for epoch in range(epochs):
             elements = [i for i in range(len(train))]
@@ -123,7 +123,8 @@ if __name__ == '__main__':
             else:
                 torch.save(trainer.model.state_dict(), os.path.join(checkpoints_dir, f"self_supervised_{epoch}.pt"))
 
-            trainer.model.load_state_dict(torch.load(os.path.join(checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
+        print(f"best poch: {best_epoch}")
+        trainer.model.load_state_dict(torch.load(os.path.join(checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
 
     if do_test:
         model = trainer.model
@@ -146,6 +147,7 @@ if __name__ == '__main__':
           assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
         
           net, im, fm = back_to_petri(edge_index, nodes, result)
+
           sound_nets += int(is_sound(net, im, fm))
         
           name = str(i)
