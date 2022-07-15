@@ -93,7 +93,7 @@ def generate_features(dataframe, tg, n):
 	return df
 
 
-def build_graph(unique_activities, places, net_places, encoding):
+def build_graph(unique_activities, places, encoding, net_places={None}):
 	G = nx.DiGraph()
 
 	y = []

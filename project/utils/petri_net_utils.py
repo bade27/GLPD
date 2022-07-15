@@ -157,8 +157,11 @@ def add_one_to_many(parent_of, parallel, places):
     return new_places
 
 
-def add_places(dataframe, relations):
+def add_places(dataframe, relations, net_places=None):
     places = set()
+
+    if net_places:
+        places.union(net_places)
     
     causality = {}
     parallel = {}
