@@ -10,24 +10,18 @@ class SelfSupPredictor(torch.nn.Module):
   def __init__(self, num_node_features, features_size, output_size, encoder, device):
     super(SelfSupPredictor, self).__init__()
     self.output_size = output_size
-    self.device = device
     self.first_encoder = FirstEncoder(num_node_features, features_size, kind=encoder)
     self.second_encoder = SecondEncoder(features_size, features_size, kind=encoder)
     self.decoder = DecoderMLP(features_size*3, output_size)
     self.log_sigmoid = torch.nn.LogSigmoid()
 
-  def forward(self, data):
+  def forward(self, x, edge_index, original, y, nodes, variants):
     if self.training:
-      return self.forward_training(data)
+      return self.forward_training(x, edge_index, original, y, nodes, variants)
     else:
-      return self.inference(data)
+      return self.inference(x, edge_index, original, y, nodes, variants)
 
-  def forward_training(self, data):
-    x, edge_index, original, y, nodes, variants = data
-
-    x = x.to(self.device)
-    edge_index = edge_index.to(self.device)
-
+  def forward_training(self, x, edge_index, original, y, nodes, variants):
     def get_followers(idx, edge_index):
       followers = set()
       for i in range(len(edge_index[0])):
@@ -35,7 +29,13 @@ class SelfSupPredictor(torch.nn.Module):
           followers.add(edge_index[1][i].item())
       return followers
 
-    predictions = torch.zeros(len(nodes), self.output_size, device=self.device)
+    try:
+      x.get_device()
+      device = "cuda"
+    except:
+      device = "cpu"
+
+    predictions = torch.zeros(len(nodes), self.output_size, device=device)
     features = self.first_encoder(x, edge_index)
 
     # total = sum([variant['count'] for variant in variants])
@@ -47,7 +47,7 @@ class SelfSupPredictor(torch.nn.Module):
     for variant in variants:
       features = prev_features
       activities = variant['variant']
-      prediction = torch.zeros(len(nodes), self.output_size, device=self.device)
+      prediction = torch.zeros(len(nodes), self.output_size, device=device)
       prev_prob = 0
       for i, activity in enumerate(activities):
         activity_idx = nodes.index(activity)
@@ -104,16 +104,16 @@ class SelfSupPredictor(torch.nn.Module):
     return predictions
 
 
-  def inference(self, data):
+  def inference(self, x, edge_index, original, y, nodes, variants):
     with torch.no_grad():
-      prediction = self.forward_training(data)
+      prediction = self.forward_training(x, edge_index, original, y, nodes, variants)
       _, order = torch.sort(prediction.squeeze(), descending=True)
       order_map = {n.item():i for i,n in enumerate(order)}
   
-      result = ['p' not in node for node in data[4]]
+      result = ['p' not in node for node in nodes]
       
-      activities = [i for i in range(data[4].index('|')+1)]
-      connections = {activity:get_next_activities(data[2], activity) for activity in activities}
+      activities = [i for i in range(nodes.index('|')+1)]
+      connections = {activity:get_next_activities(original, activity) for activity in activities}
 
       checked_places = set()
 
@@ -123,9 +123,9 @@ class SelfSupPredictor(torch.nn.Module):
       while keep_going:
         for activity in activities:
           if activity not in ok_activities:
-            discovered_next = get_next_activities(data[2], activity, result)
+            discovered_next = get_next_activities(original, activity, result)
             if discovered_next != connections[activity]:
-              next_places, _ = get_forward_star(data[2], activity)
+              next_places, _ = get_forward_star(original, activity)
               next_places.sort(key = lambda x: order_map[x])
               for n in next_places:
                 if n not in checked_places:

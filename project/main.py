@@ -1,20 +1,11 @@
 import platform
 import os
 import argparse
-import random
-import torch
-from tqdm import tqdm
 from data_handling.dataset import Dataset
 import data_handling.stats as stats
 from utils.general_utils import create_dirs
-from utils.graph_utils import is_graph_connected
-from utils.petri_net_utils import back_to_petri
-from utils.pm4py_utils import is_sound, save_petri_net_to_img, save_petri_net_to_pnml
 from utils.general_utils import copy_dir
-from model import structure as st
 from model.training import Trainer
-from model.graph_dataset import MetaDataset
-from model.self_supervised import SelfSupPredictor
 
 
 machine = platform.system()
@@ -24,6 +15,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--generate_data", action="store_true")
 parser.add_argument("--train", action="store_true")
 parser.add_argument("--test", action="store_true")
+parser.add_argument("--model_type", type=str, default="selfsupervised")
+parser.add_argument("--optimizer", type=str, default="ADAM")
+parser.add_argument("--lr", type=float, default=1e-3)
+parser.add_argument("--gnn_type", type=str, default="gcn")
 parser.add_argument("--base_dir", type=str, default="/home/linuxpc/MEGAsync/all_data_tesi/data")
 
 
@@ -33,10 +28,12 @@ if __name__ == '__main__':
     do_train = args.train
     do_test = args.test
     base_dir = args.base_dir if machine == "Linux" else path_to_windows(args.base_dir)   
-    checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
-    inference_dir = os.path.join(base_dir, "..", "inference")
+    model_type = args.model_type
+    optimizer =args.optimizer
+    lr = args.lr
+    gnn_type = args.gnn_type
 
-    create_dirs([base_dir, checkpoints_dir, inference_dir])
+    create_dirs([base_dir])
  
     if generate_data:
         copy_before_split = os.path.join(base_dir, '..', "data_before_split")
@@ -66,94 +63,15 @@ if __name__ == '__main__':
 
         copy_dir(base_dir, copy_after_split)
 
-    if do_train:
-        num_node_features, features_size, output_size = st.num_node_features, st.features_size, st.output_size
 
-        train = MetaDataset(os.path.join(base_dir, "train_graphs"))
-        valid = MetaDataset(os.path.join(base_dir, "validation_graphs"))
-        test = MetaDataset(os.path.join(base_dir, "test_graphs"))
+    trainer = Trainer(model_type, base_dir, optimizer, lr, gnn_type)
 
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        # device = 'cpu'
-
-        l_train = len(train)
-        ii = [n for n in range(l_train)]
-
-
-        model = SelfSupPredictor(num_node_features, features_size, output_size, 'gcn', device)
-        model = model.to(device)
-
-        optimizer = torch.optim.Adam(model.parameters(), 1e-3)
-
-        trainer = Trainer(model, optimizer, device)
-
-        epochs = 1
-
-        best_loss = float('+inf')
-        best_epoch = 0
-        no_epochs_no_improv = 0
-        patience = 5
-
-        for epoch in range(epochs):
-            elements = [i for i in range(len(train))]
-            random.shuffle(elements)
-
-            sum_loss = 0
-            best_loss = float('-inf')
-            best_epoch = 0
-
-            current_model = None
-            for i in tqdm(elements):
-                current_model, loss = trainer.train(train[i], 100)
-                trainer.model = current_model
-                sum_loss += loss
     
-            no_epochs = epoch
+    if do_train:
+        trainer.train(1, 1, 100)
 
-            if sum_loss < best_loss:
-                no_epochs_no_improv = 0
-                best_epoch = epoch
-                best_loss = sum_loss
-            else:
-                no_epochs_no_improv += 1
 
-            if epoch > patience and no_epochs_no_improv == patience:
-                break
-            else:
-                torch.save(trainer.model.state_dict(), os.path.join(checkpoints_dir, f"self_supervised_{epoch}.pt"))
-
-        print(f"best poch: {best_epoch}")
-        trainer.model.load_state_dict(torch.load(os.path.join(checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
+        
 
     if do_test:
-        model = trainer.model
-        model.eval()
-        
-        logs_dir = os.path.join(base_dir, "test_graphs", "logs")
-        logs = sorted(os.listdir(logs_dir))
-
-        sound_nets = 0
-        connected = 0
-        for i in tqdm(range(len(test))):
-          x, _, edge_index, _, nodes, _ = test[i]
-        
-          mask = trainer.test(test[i])
-        
-          connected += int(is_graph_connected(edge_index, mask))
-        
-          result = [int(v) for v in mask]
-        
-          assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
-        
-          net, im, fm = back_to_petri(edge_index, nodes, result)
-
-          sound_nets += int(is_sound(net, im, fm))
-        
-          name = str(i)
-        
-          save_petri_net_to_img(net, im, fm, os.path.join(inference_dir, name + '.png'))
-          save_petri_net_to_pnml(net, im, fm, os.path.join(inference_dir, name + '.pnml'))
-        
-        print(f'number of sound graphs {sound_nets}/{len(test)}')
-        print(f'number of connected graphs {connected}/{len(test)}')
+        trainer.test()
