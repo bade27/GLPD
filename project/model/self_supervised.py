@@ -7,7 +7,7 @@ from utils.graph_utils import get_forward_star, get_next_activities
 
 
 class SelfSupPredictor(torch.nn.Module):
-  def __init__(self, num_node_features, features_size, output_size, encoder, device):
+  def __init__(self, num_node_features, features_size, output_size, encoder, device): # delete device
     super(SelfSupPredictor, self).__init__()
     self.output_size = output_size
     self.first_encoder = FirstEncoder(num_node_features, features_size, kind=encoder)

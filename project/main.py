@@ -1,6 +1,8 @@
 import platform
 import os
 import argparse
+
+import torch
 from data_handling.dataset import Dataset
 import data_handling.stats as stats
 from utils.general_utils import create_dirs
@@ -40,7 +42,7 @@ if __name__ == '__main__':
         copy_after_split = os.path.join(base_dir, '..', "data_after_split")
 
         # generate data
-        dataset = Dataset(base_dir, random_features=True)
+        dataset = Dataset(base_dir, model_type, random_features=True)
         dataset.set_statistics(
             stats.mode, 
             stats.min, 
@@ -64,11 +66,11 @@ if __name__ == '__main__':
         copy_dir(base_dir, copy_after_split)
 
 
-    trainer = Trainer(model_type, base_dir, optimizer, lr, gnn_type)
+    trainer = Trainer(model_type, base_dir, optimizer, lr, gnn_type, torch.nn.NLLLoss())
 
     
     if do_train:
-        trainer.train(1, 1, 100)
+        trainer.train(10, 1)
 
 
         

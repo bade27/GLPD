@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
@@ -15,6 +16,7 @@ from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_
 from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, draw_networkx, get_backward_star, get_forward_star, mean_node_degree
 from utils.petri_net_utils import add_places, alpha_relations, build_net_from_places, find_actual_places
 from utils.pm4py_utils import display_petri_net, generate_trees, generate_log, build_petri_net_from_log, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml
+from utils.petri_net_utils import back_to_petri
 import model.structure as model_structure
 import shutil
 from sklearn.preprocessing import KBinsDiscretizer
@@ -22,8 +24,9 @@ import torch
 
 
 class Dataset():
-    def __init__(self, data_dir, random_features=False):
+    def __init__(self, data_dir, model_type="supervised", random_features=False):
         self.data_dir = data_dir
+        self.model_type = model_type
         self.random_features = random_features
 
         self.graphs_dir = os.path.join(self.data_dir, "graphs")
@@ -34,25 +37,29 @@ class Dataset():
         self.saved_dir = os.path.join(self.data_dir, "saved_images_pnml")
         self.networkx_dir = os.path.join(self.data_dir, 'networkx')
 
-        self.original_dir = os.path.join(self.saved_dir, "original_nets")
-        self.original_dir_imgs = os.path.join(self.original_dir, "images")
-        self.original_dir_pnml = os.path.join(self.original_dir, "pnml")
-
         self.input_dir = os.path.join(self.saved_dir, "input_net")
         self.input_dir_imgs = os.path.join(self.input_dir, "images")
         self.input_dir_pnml = os.path.join(self.input_dir, "pnml")
 
-        # self.reconstr_dir = os.path.join(self.saved_dir, "reconstructed_nets")
-        # self.reconstr_dir_imgs = os.path.join(self.reconstr_dir, "images")
-        # self.reconstr_dir_pnml = os.path.join(self.reconstr_dir, "pnml")
-
         self.dirs = [
             self.data_dir, self.graphs_dir, 
             self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
-            self.networkx_dir, self.saved_dir, 
-            self.original_dir, self.original_dir_imgs, self.original_dir_pnml,
+            self.networkx_dir, self.saved_dir,
             self.input_dir, self.input_dir_imgs, self.input_dir_pnml] 
-            # self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml]
+        
+        if self.model_type == "supervised":
+            self.original_dir = os.path.join(self.saved_dir, "original_nets")
+            self.original_dir_imgs = os.path.join(self.original_dir, "images")
+            self.original_dir_pnml = os.path.join(self.original_dir, "pnml")
+
+            self.reconstr_dir = os.path.join(self.saved_dir, "reconstructed_nets")
+            self.reconstr_dir_imgs = os.path.join(self.reconstr_dir, "images")
+            self.reconstr_dir_pnml = os.path.join(self.reconstr_dir, "pnml")
+            
+            self.dirs += [
+                self.original_dir, self.original_dir_imgs, self.original_dir_pnml,
+                self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml
+                ]
 
         create_dirs(self.dirs)
 
@@ -126,11 +133,19 @@ class Dataset():
                 # log and initial df
                 tree = trees[i] if parameters["no_models"] > 1 else trees
                 log = generate_log(tree, no_traces)
+
+                if self.model_type == "supervised":
+                    net, im, fm = build_petri_net_from_log(log)
+                
+                unique_activities = set()
+
+                for trace in log:
+                    for activity in trace:
+                        unique_activities.add(activity["concept:name"])
             
                 df = log_to_dataframe(log)
-                net, im, fm = build_petri_net_from_log(log)
         
-                unique_activities = set([transition.name for transition in net.transitions])
+                # unique_activities = set([transition.name for transition in net.transitions])
 
                 # insert special activities '<' (start) and '|' (finish)
                 df_start_finish = pd.DataFrame()
@@ -152,14 +167,18 @@ class Dataset():
                 # alpha relations
                 df_alpha_relations = alpha_relations(log)
 
-                net_places = find_actual_places(net) # places of the original net
-                places = add_places(new_df, df_alpha_relations) # places of the input net
+                if self.model_type == "supervised":
+                    net_places = find_actual_places(net) # places of the original net
+                    places = add_places(new_df, df_alpha_relations, net_places) # places of the input net
+                else:
+                    net_places = set()
+                    places = add_places(new_df, df_alpha_relations)
 
                 # input net
                 input_net, input_im, input_fm = build_net_from_places(unique_activities, places)
 
                 # networkx graph of the new net
-                graph, y, nodes, _ = build_graph(unique_activities, places, net_places, encoding)
+                graph, y, nodes, _ = build_graph(unique_activities, places, encoding, net_places)
 
                 adj = nx.to_numpy_matrix(graph)
 
@@ -204,23 +223,30 @@ class Dataset():
                 data = pd.concat([data, new_df_features], axis=0)
                 data.reset_index(drop=True, inplace=True)
 
-                # rec_net, rec_im, rec_fm = back_to_petri(original_edge_index, nodes, y)
+                if self.model_type == "supervised":
+                    rec_net, rec_im, rec_fm = back_to_petri(original_edge_index, nodes, y)
                 
                 if visualize_nets:
-                    display_petri_net(net, im, fm)
-                    display_petri_net(input_net, input_im, input_fm)
-                    # display_petri_net(rec_net, rec_im, rec_fm)
                     draw_networkx(graph)
+                    display_petri_net(input_net, input_im, input_fm)
+
+                    if self.model_type == "supervised":
+                        display_petri_net(net, im, fm)
+                        display_petri_net(rec_net, rec_im, rec_fm)
 
                 if save_images:
-                    save_petri_net_to_img(net, im, fm, os.path.join(self.original_dir, "images", "original_" + str(i+offset).zfill(pad) + '.png'))
                     save_petri_net_to_img(input_net, input_im, input_fm, os.path.join(self.input_dir, "images", "input_" + str(i+offset).zfill(pad) + '.png'))
-                    # save_petri_net_to_img(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "images", "rec_" + str(i+offset).zfill(pad) + '.png'))
+                    
+                    if self.model_type == "supervised":
+                        save_petri_net_to_img(net, im, fm, os.path.join(self.original_dir, "images", "original_" + str(i+offset).zfill(pad) + '.png'))
+                        save_petri_net_to_img(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "images", "rec_" + str(i+offset).zfill(pad) + '.png'))
 
                 if save_models:
-                    save_petri_net_to_pnml(net, im, fm, os.path.join(self.original_dir, "pnml", "original_" + str(i+offset).zfill(pad) + '.pnml'))
                     save_petri_net_to_pnml(input_net, input_im, input_fm, os.path.join(self.input_dir, "pnml", "input_" + str(i+offset).zfill(pad) + '.pnml'))
-                    # save_petri_net_to_pnml(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "pnml", "rec_" + str(i+offset).zfill(pad) + '.pnml'))
+                    
+                    if self.model_type == "supervised":
+                        save_petri_net_to_pnml(net, im, fm, os.path.join(self.original_dir, "pnml", "original_" + str(i+offset).zfill(pad) + '.pnml'))
+                        save_petri_net_to_pnml(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "pnml", "rec_" + str(i+offset).zfill(pad) + '.pnml'))
 
                 if save_networkx:
                     dump_to_pickle(os.path.join(self.networkx_dir, 'gx_' + str(i+offset).zfill(pad)), graph)
@@ -393,7 +419,30 @@ class Dataset():
         train_nodes_dir = os.path.join(train_graphs_dir, "nodes")
         train_raw_dir = os.path.join(train_graphs_dir, "raw")
         train_variants_dir = os.path.join(train_graphs_dir, "variants")
-        train_dirs = [train_graphs_dir, train_logs_dir, train_nodes_dir, train_raw_dir, train_variants_dir]
+
+        train_saved_dir = os.path.join(train_graphs_dir, "saved_images_pnml")
+        train_input_dir = os.path.join(train_saved_dir, "input_net")
+        train_input_dir_imgs = os.path.join(train_input_dir, "images")
+        train_input_dir_pnml = os.path.join(train_input_dir, "pnml")
+
+        train_dirs = [
+            train_graphs_dir, train_logs_dir, train_nodes_dir, train_raw_dir, train_variants_dir,
+            train_saved_dir, train_input_dir, train_input_dir_imgs, train_input_dir_pnml
+            ]
+
+        if self.model_type == "supervised":
+            train_original_dir = os.path.join(train_saved_dir, "original_net")
+            train_original_dir_imgs = os.path.join(train_original_dir, "images")
+            train_original_dir_pnml = os.path.join(train_original_dir, "pnml")
+
+            train_reconstructed_dir = os.path.join(train_saved_dir, "reconstructed_net")
+            train_reconstructed_dir_imgs = os.path.join(train_reconstructed_dir, "images")
+            train_reconstructed_dir_pnml = os.path.join(train_reconstructed_dir, "pnml")
+
+            train_dirs += [
+                train_original_dir, train_original_dir_imgs, train_original_dir_pnml,
+                train_reconstructed_dir, train_reconstructed_dir_imgs, train_reconstructed_dir_pnml]
+
 
         # val dirs
         validation_graphs_dir = os.path.join(self.data_dir, "validation_graphs")
@@ -401,10 +450,31 @@ class Dataset():
         validation_nodes_dir = os.path.join(validation_graphs_dir, "nodes")
         validation_raw_dir = os.path.join(validation_graphs_dir, "raw")
         validation_variants_dir = os.path.join(validation_graphs_dir, "variants")
+
+        validation_saved_dir = os.path.join(validation_graphs_dir, "saved_images_pnml")
+        validation_input_dir = os.path.join(validation_saved_dir, "input_net")
+        validation_input_dir_imgs = os.path.join(validation_input_dir, "images")
+        validation_input_dir_pnml = os.path.join(validation_input_dir, "pnml")
+
         validation_dirs =[
             validation_graphs_dir, validation_logs_dir, 
-            validation_nodes_dir, validation_raw_dir, validation_variants_dir
+            validation_nodes_dir, validation_raw_dir, validation_variants_dir,
+            validation_saved_dir, validation_input_dir, validation_input_dir_imgs, validation_input_dir_pnml
             ]
+
+        if self.model_type == "supervised":
+            validation_original_dir = os.path.join(validation_saved_dir, "original_net")
+            validation_original_dir_imgs = os.path.join(validation_original_dir, "images")
+            validation_original_dir_pnml = os.path.join(train_original_dir, "pnml")
+
+            validation_reconstructed_dir = os.path.join(validation_saved_dir, "reconstructed_net")
+            validation_reconstructed_dir_imgs = os.path.join(validation_reconstructed_dir, "images")
+            validation_reconstructed_dir_pnml = os.path.join(validation_reconstructed_dir, "pnml")
+
+            validation_dirs += [
+                validation_original_dir, validation_original_dir_imgs, validation_original_dir_pnml,
+                validation_reconstructed_dir, validation_reconstructed_dir_imgs, validation_reconstructed_dir_pnml]
+
 
         # test dirs
         test_graphs_dir = os.path.join(self.data_dir, "test_graphs")
@@ -412,7 +482,30 @@ class Dataset():
         test_nodes_dir = os.path.join(test_graphs_dir, "nodes")
         test_raw_dir = os.path.join(test_graphs_dir, "raw")
         test_variants_dir = os.path.join(test_graphs_dir, "variants")
-        test_dirs = [test_graphs_dir, test_logs_dir, test_nodes_dir, test_raw_dir, test_variants_dir]
+
+        test_saved_dir = os.path.join(test_graphs_dir, "saved_images_pnml")
+        test_input_dir = os.path.join(test_saved_dir, "input_net")
+        test_input_dir_imgs = os.path.join(test_input_dir, "images")
+        test_input_dir_pnml = os.path.join(test_input_dir, "pnml")
+
+        test_dirs = [test_graphs_dir, test_logs_dir, test_nodes_dir, test_raw_dir, test_variants_dir,
+            test_saved_dir, test_input_dir, test_input_dir_imgs, test_input_dir_pnml
+            ]
+
+        if self.model_type == "supervised":
+            test_original_dir = os.path.join(test_saved_dir, "original_net")
+            test_original_dir_imgs = os.path.join(test_original_dir, "images")
+            test_original_dir_pnml = os.path.join(test_original_dir, "pnml")
+
+            test_reconstructed_dir = os.path.join(test_saved_dir, "reconstructed_net")
+            test_reconstructed_dir_imgs = os.path.join(test_reconstructed_dir, "images")
+            test_reconstructed_dir_pnml = os.path.join(test_reconstructed_dir, "pnml")
+
+            test_dirs += [
+                test_original_dir, test_original_dir_imgs, test_original_dir_pnml,
+                test_reconstructed_dir, test_reconstructed_dir_imgs, test_reconstructed_dir_pnml]
+
+        
 
         all_dirs = train_dirs + validation_dirs + test_dirs
 
@@ -483,7 +576,47 @@ class Dataset():
             train_graphs, valid_graphs, test_graphs,
             ys)
 
+
+        # split and move imgs and pnml ######################################################################################
+        split_move_files(
+            self.input_dir_imgs,
+            [train_input_dir_imgs, validation_input_dir_imgs, test_input_dir_imgs], 
+            train_graphs, valid_graphs, test_graphs
+            )
+        
+        split_move_files(
+            self.input_dir_pnml,
+            [train_input_dir_pnml, validation_input_dir_pnml, test_input_dir_pnml], 
+            train_graphs, valid_graphs, test_graphs
+            )
+
+        split_move_files(
+            self.original_dir_imgs,
+            [train_original_dir_imgs, validation_original_dir_imgs, test_original_dir_imgs], 
+            train_graphs, valid_graphs, test_graphs
+            )
+        
+        split_move_files(
+            self.original_dir_pnml,
+            [train_original_dir_pnml, validation_original_dir_pnml, test_original_dir_pnml], 
+            train_graphs, valid_graphs, test_graphs
+            )
+
+        split_move_files(
+            self.reconstr_dir_imgs,
+            [train_reconstructed_dir_imgs, validation_reconstructed_dir_imgs, test_reconstructed_dir_imgs], 
+            train_graphs, valid_graphs, test_graphs
+            )
+        
+        split_move_files(
+            self.reconstr_dir_pnml,
+            [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
+            train_graphs, valid_graphs, test_graphs
+            )
+
+
         shutil.rmtree(self.graphs_dir)
+        shutil.rmtree(self.saved_dir)
 
 
     def clean_dataset_and_split(self):
