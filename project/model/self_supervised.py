@@ -10,6 +10,7 @@ class SelfSupPredictor(torch.nn.Module):
   def __init__(self, num_node_features, features_size, output_size, encoder, device): # delete device
     super(SelfSupPredictor, self).__init__()
     self.output_size = output_size
+    self.device = device
     self.first_encoder = FirstEncoder(num_node_features, features_size, kind=encoder)
     self.second_encoder = SecondEncoder(features_size, features_size, kind=encoder)
     self.decoder = DecoderMLP(features_size*3, output_size)
@@ -22,23 +23,8 @@ class SelfSupPredictor(torch.nn.Module):
       return self.inference(x, edge_index, original, y, nodes, variants)
 
   def forward_training(self, x, edge_index, original, y, nodes, variants):
-    def get_followers(idx, edge_index):
-      followers = set()
-      for i in range(len(edge_index[0])):
-        if edge_index[0][i].item() == idx:
-          followers.add(edge_index[1][i].item())
-      return followers
-
-    try:
-      x.get_device()
-      device = "cuda"
-    except:
-      device = "cpu"
-
-    predictions = torch.zeros(len(nodes), self.output_size, device=device)
+    predictions = torch.zeros(len(nodes), self.output_size, device=self.device)
     features = self.first_encoder(x, edge_index)
-
-    # total = sum([variant['count'] for variant in variants])
 
     random.shuffle(variants)
 
@@ -47,11 +33,11 @@ class SelfSupPredictor(torch.nn.Module):
     for variant in variants:
       features = prev_features
       activities = variant['variant']
-      prediction = torch.zeros(len(nodes), self.output_size, device=device)
+      prediction = torch.zeros(len(nodes), self.output_size, device=self.device)
       prev_prob = 0
       for i, activity in enumerate(activities):
         activity_idx = nodes.index(activity)
-        all_followers = get_followers(activity_idx, original)
+        all_followers, _ = get_forward_star(original, activity_idx)
 
         if len(all_followers) == 0:
           continue
@@ -60,7 +46,7 @@ class SelfSupPredictor(torch.nn.Module):
         for j, next_activity in enumerate(activities[i+1:]):
           next_activity_idx = nodes.index(next_activity)
           for follower in all_followers:
-            next_next = get_followers(follower, original)
+            next_next, _ = get_forward_star(original, follower)
             if next_activity_idx in next_next:
               if follower not in in_variant_followers:
                 in_variant_followers[follower] = set()

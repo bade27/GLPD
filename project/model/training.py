@@ -72,14 +72,14 @@ class Trainer():
 		best_loss = float('+inf')
 		best_epoch = 0
 		no_epochs_no_improv = 0
+
+		epoch_loss = []
 		
 		for epoch in range(epochs):
 			elements = [i for i in range(len(self.train_dataset))]
 			random.shuffle(elements)
 			
 			sum_loss = 0
-			best_loss = float('-inf') # delete this
-			best_epoch = 0 # delete this
 			
 			for i in tqdm(elements):
 				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
@@ -114,7 +114,11 @@ class Trainer():
 					max_runs -= 1
 					
 				sum_loss += np.mean(cumulative_loss)
-				
+			
+			epoch_loss.append(sum_loss)
+
+			print(f"epoch {epoch+1} - loss: {sum_loss}")
+
 			no_epochs = epoch
 			
 			if sum_loss < best_loss:
@@ -167,7 +171,7 @@ class Trainer():
 
 			mean_loss.append(np.mean(epoch_loss))
 			mean_acc.append(accuracy)
-			print(f"epoch {epoch} - loss: {mean_loss[-1]} - acc: {mean_acc[-1]}")
+			print(f"epoch {epoch+1} - loss: {mean_loss[-1]} - acc: {mean_acc[-1]}")
 
 			no_epochs = epoch
 			
