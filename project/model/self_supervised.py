@@ -93,7 +93,13 @@ class SelfSupPredictor(torch.nn.Module):
   def inference(self, x, edge_index, original, y, nodes, variants):
     with torch.no_grad():
       prediction = self.forward_training(x, edge_index, original, y, nodes, variants)
+
+      assert len(nodes) == len(prediction)
+
       _, order = torch.sort(prediction.squeeze(), descending=True)
+
+      assert len(order) == len(nodes)
+
       order_map = {n.item():i for i,n in enumerate(order)}
   
       result = ['p' not in node for node in nodes]

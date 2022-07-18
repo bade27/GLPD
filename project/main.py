@@ -5,6 +5,7 @@ import argparse
 import torch
 from data_handling.dataset import Dataset
 import data_handling.stats as stats
+from evaluation.evaluate import Evaluator
 from utils.general_utils import create_dirs
 from utils.general_utils import copy_dir
 from model.training import Trainer
@@ -70,10 +71,13 @@ if __name__ == '__main__':
 
     
     if do_train:
-        trainer.train(10, 1)
+        trainer.train(1, 1)
 
 
         
 
     if do_test:
         trainer.test()
+        test_dir = os.path.join(base_dir, "test_graphs")
+        evaluator = Evaluator(test_dir, model_type)
+        evaluator.evaluate()

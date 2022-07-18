@@ -1,3 +1,9 @@
+from pathlib import Path
+import sys
+path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
+sys.path.insert(0, path)
+
+
 import os
 import numpy as np
 import torch
@@ -37,7 +43,7 @@ class Trainer():
 		random.seed(1234)
 
 		self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
-		self.inference_dir = os.path.join(base_dir, "..", "inference")
+		self.inference_dir = os.path.join(base_dir, "test_graphs", "inference")
 		create_dirs([self.checkpoints_dir, self.inference_dir])
 		
 	def set_model(self, model):
@@ -47,15 +53,17 @@ class Trainer():
 		return self.model
 		
 		
-	def train(self, epochs, patience, max_runs=None):
-		num_node_features, features_size, output_size = st.num_node_features, st.features_size, st.output_size
+	def train(self, epochs, patience, max_runs=100):
+		num_node_features, features_size = st.num_node_features, st.features_size
 		
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.device = 'cpu' 
 		
 		if self.model_type == "supervised":
+			output_size = st.output_size_sup
 			self.model = SupervisedPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 		else:
+			output_size = st.output_size_self_sup
 			self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 			
 		self.model = self.model.to(self.device)
@@ -214,6 +222,11 @@ class Trainer():
 
 	
 	def test(self):
+		img_dir = os.path.join(self.inference_dir, "images")
+		pnml_dir = os.path.join(self.inference_dir, "pnml")
+
+		create_dirs([img_dir, pnml_dir])
+
 		self.model.eval()
 
 		sound_nets = 0
@@ -238,8 +251,8 @@ class Trainer():
 
 			name = str(i)
 
-			save_petri_net_to_img(net, im, fm, os.path.join(self.inference_dir, name + '.png'))
-			save_petri_net_to_pnml(net, im, fm, os.path.join(self.inference_dir, name + '.pnml'))
+			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
+			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))
 
 		print(f'number of sound graphs {sound_nets}/{len(self.test_dataset)}')
 		print(f'number of connected graphs {connected}/{len(self.test_dataset)}')

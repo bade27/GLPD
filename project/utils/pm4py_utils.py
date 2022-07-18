@@ -3,7 +3,7 @@ import sys
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
-
+import pm4py
 from pm4py.algo.simulation.tree_generator import algorithm as tree_gen
 from pm4py.objects.process_tree import semantics
 from pm4py.objects.conversion.log import converter as log_converter
@@ -69,6 +69,16 @@ def save_petri_net_to_img(net, initial_marking, final_marking, path):
 
 def save_log_xes(log, path):
     xes_exporter.apply(log, path)
+
+
+def load_log_xes(path):
+    log = pm4py.read_xes(path)
+    return log
+
+
+def load_petri_net(path):
+    net, initial_marking, final_marking = pm4py.read_pnml(path)
+    return net, initial_marking, final_marking
 
 
 def evaluate(log, net, im, fm):
