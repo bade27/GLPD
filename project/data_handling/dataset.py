@@ -590,29 +590,30 @@ class Dataset():
             train_graphs, valid_graphs, test_graphs
             )
 
-        split_move_files(
-            self.original_dir_imgs,
-            [train_original_dir_imgs, validation_original_dir_imgs, test_original_dir_imgs], 
-            train_graphs, valid_graphs, test_graphs
-            )
-        
-        split_move_files(
-            self.original_dir_pnml,
-            [train_original_dir_pnml, validation_original_dir_pnml, test_original_dir_pnml], 
-            train_graphs, valid_graphs, test_graphs
-            )
-
-        split_move_files(
-            self.reconstr_dir_imgs,
-            [train_reconstructed_dir_imgs, validation_reconstructed_dir_imgs, test_reconstructed_dir_imgs], 
-            train_graphs, valid_graphs, test_graphs
-            )
-        
-        split_move_files(
-            self.reconstr_dir_pnml,
-            [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
-            train_graphs, valid_graphs, test_graphs
-            )
+        if self.model_type == "supervised":
+            split_move_files(
+                self.original_dir_imgs,
+                [train_original_dir_imgs, validation_original_dir_imgs, test_original_dir_imgs], 
+                train_graphs, valid_graphs, test_graphs
+                )
+            
+            split_move_files(
+                self.original_dir_pnml,
+                [train_original_dir_pnml, validation_original_dir_pnml, test_original_dir_pnml], 
+                train_graphs, valid_graphs, test_graphs
+                )
+    
+            split_move_files(
+                self.reconstr_dir_imgs,
+                [train_reconstructed_dir_imgs, validation_reconstructed_dir_imgs, test_reconstructed_dir_imgs], 
+                train_graphs, valid_graphs, test_graphs
+                )
+            
+            split_move_files(
+                self.reconstr_dir_pnml,
+                [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
+                train_graphs, valid_graphs, test_graphs
+                )
 
 
         shutil.rmtree(self.graphs_dir)
