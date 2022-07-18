@@ -33,6 +33,7 @@ def alpha_relations(log):
     unrelated = lambda x, y: not (y in directly_follows[x]) and not (x in directly_follows[y])
 
     unique_activities = directly_follows.keys()
+    alpha_dict = {"->":set(), "<-":set(), "//":set(), "#":set()}
 
     relations = []
     for x in unique_activities:
@@ -40,15 +41,20 @@ def alpha_relations(log):
             if causality(x, y):
                 if [x, y, "->"] not in relations:
                     relations.append([x, y, "->"])
+                    alpha_dict["->"].add((x,y))
                 if [y, x, "<-"] not in relations:    
                     relations.append([y, x, "<-"])
+                    alpha_dict["<-"].add((y,x))
             elif parallel(x, y):
                 if [x, y, "//"] not in relations:
                     relations.append([x, y, "//"])
+                    alpha_dict["//"].add((x,y))
                 if [y, x, "//"] not in relations:
                     relations.append([y, x, "//"])
+                    alpha_dict["//"].add((y,x))
             elif unrelated(x, y):
                 relations.append([x, y, "#"])
+                alpha_dict["#"].add((x,y))
 
     df = pd.DataFrame(relations, columns=['X', 'Y','Z'])
 
@@ -56,7 +62,7 @@ def alpha_relations(log):
 
     df.set_index("X", inplace=True)
 
-    return df
+    return df, alpha_dict
 
 
 def add_dfg_rel(parent_of, places):

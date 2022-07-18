@@ -68,7 +68,7 @@ def save_petri_net_to_img(net, initial_marking, final_marking, path):
 
 
 def save_log_xes(log, path):
-    xes_exporter.apply(log, path)
+    pm4py.write_xes(log, path)
 
 
 def load_log_xes(path):

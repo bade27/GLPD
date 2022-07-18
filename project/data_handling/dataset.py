@@ -36,6 +36,7 @@ class Dataset():
         self.graph_variants_dir = os.path.join(self.graphs_dir, "variants")
         self.saved_dir = os.path.join(self.data_dir, "saved_images_pnml")
         self.networkx_dir = os.path.join(self.data_dir, 'networkx')
+        self.alpha_relations_dir = os.path.join(self.graphs_dir, 'alpha_relations')
 
         self.input_dir = os.path.join(self.saved_dir, "input_net")
         self.input_dir_imgs = os.path.join(self.input_dir, "images")
@@ -44,7 +45,7 @@ class Dataset():
         self.dirs = [
             self.data_dir, self.graphs_dir, 
             self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
-            self.networkx_dir, self.saved_dir,
+            self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
             self.input_dir, self.input_dir_imgs, self.input_dir_pnml] 
         
         if self.model_type == "supervised":
@@ -165,7 +166,7 @@ class Dataset():
                 new_df = build_arcs_dataframe(df_start_finish)
 
                 # alpha relations
-                df_alpha_relations = alpha_relations(log)
+                df_alpha_relations, dict_alpha_relations = alpha_relations(log)
 
                 if self.model_type == "supervised":
                     net_places = find_actual_places(net) # places of the original net
@@ -287,6 +288,9 @@ class Dataset():
 
                 variants_file_name = os.path.join(self.graph_variants_dir, "variants_" + str(i+offset).zfill(pad))
                 dump_to_pickle(variants_file_name, variants)
+
+                alpha_relations_file_name = os.path.join(self.alpha_relations_dir, "ar_" + str(i+offset).zfill(pad))
+                dump_to_pickle(alpha_relations_file_name, dict_alpha_relations)
 
                 save_log_xes(log, os.path.join(self.logs_dir, "log_" + str(i+offset).zfill(pad) + '.xes'))
 
@@ -419,6 +423,7 @@ class Dataset():
         train_nodes_dir = os.path.join(train_graphs_dir, "nodes")
         train_raw_dir = os.path.join(train_graphs_dir, "raw")
         train_variants_dir = os.path.join(train_graphs_dir, "variants")
+        train_alpha_relations_dir = os.path.join(train_graphs_dir, "alpha_relations")
 
         train_saved_dir = os.path.join(train_graphs_dir, "saved_images_pnml")
         train_input_dir = os.path.join(train_saved_dir, "input_net")
@@ -427,8 +432,8 @@ class Dataset():
 
         train_dirs = [
             train_graphs_dir, train_logs_dir, train_nodes_dir, train_raw_dir, train_variants_dir,
-            train_saved_dir, train_input_dir, train_input_dir_imgs, train_input_dir_pnml
-            ]
+            train_alpha_relations_dir, train_saved_dir, train_input_dir, train_input_dir_imgs, 
+            train_input_dir_pnml]
 
         if self.model_type == "supervised":
             train_original_dir = os.path.join(train_saved_dir, "original_net")
@@ -450,6 +455,7 @@ class Dataset():
         validation_nodes_dir = os.path.join(validation_graphs_dir, "nodes")
         validation_raw_dir = os.path.join(validation_graphs_dir, "raw")
         validation_variants_dir = os.path.join(validation_graphs_dir, "variants")
+        validation_alpha_relations_dir = os.path.join(validation_graphs_dir, "alpha_relations")
 
         validation_saved_dir = os.path.join(validation_graphs_dir, "saved_images_pnml")
         validation_input_dir = os.path.join(validation_saved_dir, "input_net")
@@ -457,7 +463,7 @@ class Dataset():
         validation_input_dir_pnml = os.path.join(validation_input_dir, "pnml")
 
         validation_dirs =[
-            validation_graphs_dir, validation_logs_dir, 
+            validation_graphs_dir, validation_logs_dir, validation_alpha_relations_dir,
             validation_nodes_dir, validation_raw_dir, validation_variants_dir,
             validation_saved_dir, validation_input_dir, validation_input_dir_imgs, validation_input_dir_pnml
             ]
@@ -482,6 +488,7 @@ class Dataset():
         test_nodes_dir = os.path.join(test_graphs_dir, "nodes")
         test_raw_dir = os.path.join(test_graphs_dir, "raw")
         test_variants_dir = os.path.join(test_graphs_dir, "variants")
+        test_alpha_relations_dir = os.path.join(test_graphs_dir, "alpha_relations")
 
         test_saved_dir = os.path.join(test_graphs_dir, "saved_images_pnml")
         test_input_dir = os.path.join(test_saved_dir, "input_net")
@@ -489,8 +496,8 @@ class Dataset():
         test_input_dir_pnml = os.path.join(test_input_dir, "pnml")
 
         test_dirs = [test_graphs_dir, test_logs_dir, test_nodes_dir, test_raw_dir, test_variants_dir,
-            test_saved_dir, test_input_dir, test_input_dir_imgs, test_input_dir_pnml
-            ]
+            test_saved_dir, test_input_dir, test_input_dir_imgs, test_input_dir_pnml,
+            test_alpha_relations_dir]
 
         if self.model_type == "supervised":
             test_original_dir = os.path.join(test_saved_dir, "original_net")
@@ -614,6 +621,13 @@ class Dataset():
                 [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
                 train_graphs, valid_graphs, test_graphs
                 )
+
+        # split and move alpha relations ####################################################################################
+        split_move_files(
+            os.path.join(self.graphs_dir, "alpha_relations"),
+            [train_alpha_relations_dir,validation_alpha_relations_dir,test_alpha_relations_dir], 
+            train_graphs, valid_graphs, test_graphs
+            )
 
 
         shutil.rmtree(self.graphs_dir)

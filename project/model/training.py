@@ -1,9 +1,11 @@
 from pathlib import Path
 import sys
+
+
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
-
+import pm4py
 import os
 import numpy as np
 import torch
@@ -14,8 +16,8 @@ from model.self_supervised import SelfSupPredictor
 import random
 from model.supervised import SupervisedPredictor
 from utils.general_utils import create_dirs
-
-from utils.graph_utils import is_graph_connected
+from utils.general_utils import load_pickle
+from utils.graph_utils import is_graph_connected, add_silent_transitions
 from utils.petri_net_utils import back_to_petri
 from utils.pm4py_utils import is_sound, save_petri_net_to_img, save_petri_net_to_pnml
 
@@ -57,7 +59,6 @@ class Trainer():
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.device = 'cpu' 
 		
 		if self.model_type == "supervised":
 			output_size = st.output_size_sup
@@ -224,12 +225,13 @@ class Trainer():
 	def test(self):
 		img_dir = os.path.join(self.inference_dir, "images")
 		pnml_dir = os.path.join(self.inference_dir, "pnml")
+		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")
 
 		create_dirs([img_dir, pnml_dir])
 
-		idxes = [
-			int(name.split('_')[1].split('.')[0]) for name in os.listdir(
-				os.path.join(self.base_dir, "test_graphs", "logs"))]
+		idxes = [int(name.split('_')[1].split('.')[0]) for name in os.listdir(alpha_relations_dir)]
+
+		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
 
 		self.model.eval()
 
@@ -248,6 +250,12 @@ class Trainer():
 			result = [int(v) for v in mask]
 
 			assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
+
+			alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
+			
+			new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
+
+			print(new_nodes)
 
 			net, im, fm = back_to_petri(original, nodes, result)
 
