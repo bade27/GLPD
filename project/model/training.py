@@ -227,6 +227,10 @@ class Trainer():
 
 		create_dirs([img_dir, pnml_dir])
 
+		idxes = [
+			int(name.split('_')[1].split('.')[0]) for name in os.listdir(
+				os.path.join(self.base_dir, "test_graphs", "logs"))]
+
 		self.model.eval()
 
 		sound_nets = 0
@@ -249,7 +253,7 @@ class Trainer():
 
 			sound_nets += int(is_sound(net, im, fm))
 
-			name = str(i)
+			name = self.model_type + '_' + str(idxes[i])
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
 			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))
