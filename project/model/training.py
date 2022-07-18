@@ -204,6 +204,8 @@ class Trainer():
 	def validate(self):
 		self.model.eval()
 
+		accuracies = []
+
 		for i in tqdm(range(len(self.valid_dataset))):
 			x, edge_index, original, y, nodes, variants = self.valid_dataset[i]
 
@@ -215,11 +217,14 @@ class Trainer():
 
 			result = [int(v) for v in mask]
 
-			assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
+			# assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
+
+			print(result)
 
 			accuracy = sum(result[nodes.index('|')+1:]) / (len(result)-nodes.index('|')+1)
+			accuracies.append(accuracy)
 
-		return accuracy
+		return np.mean(accuracies)
 
 	
 	def test(self):

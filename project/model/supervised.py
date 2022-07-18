@@ -80,7 +80,7 @@ class SupervisedPredictor(torch.nn.Module):
 
                     place_prediction = self.log_softmax(place_prediction)
 
-                    prediction[place] += place_prediction.squeeze() + torch.log(torch.tensor(variant['count']/total))
+                    prediction[place] += place_prediction.squeeze()
 
                     prev_prob += torch.sum(place_prediction, 0)
                     predicted_places.add(place)
