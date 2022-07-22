@@ -58,7 +58,9 @@ class Trainer():
 	def train(self, epochs, patience, max_runs=100):
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
+
 		
 		if self.model_type == "supervised":
 			output_size = st.output_size_sup
