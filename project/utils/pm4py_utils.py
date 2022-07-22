@@ -104,16 +104,11 @@ def get_variants(log, reverse=True):
 
 
 def get_variants_parsed(log):
-    variants_count = case_statistics.get_variant_statistics(log)
-    variants_count = sorted(variants_count, key=lambda x: x['count'], reverse=True)
-
-    variants = []
-    for variant in variants_count:
-        v = variant['variant'].split(',')
-        v.insert(0, '<')
-        v.append('|')
-        c = variant['count']
-        d = {'variant': v, 'count': c}
-        variants.append(d)
+    variants_log = pm4py.get_variants_as_tuples(log)
+    variants = list()
+    for variant_log in variants_log:
+        vl = list(variant_log)
+        vl = ['<'] + vl + ['|']
+        variants.append(vl)
 
     return variants
