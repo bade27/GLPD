@@ -12,15 +12,24 @@ from pm4py.objects.petri_net.utils import petri_utils
 from utils.pm4py_utils import get_variants_parsed
 
 
-
-def get_alpha_relations(log):
+def get_eventually_follows(log, depth=1):
     variants = get_variants_parsed(log)
+    eventually_follows = {}
+    for d in range(0, depth):
+        for variant in variants:
+            for i, t in enumerate(variant):
+                if t not in eventually_follows: eventually_follows[t] = set()
+                if i+d+1 < len(variant): 
+                    eventually_follows[t].add(variant[i+d+1])
+    
+    return eventually_follows
 
-    direct_succession = {}
-    for variant in variants:
-        for i, t in enumerate(variant):
-            if t not in direct_succession: direct_succession[t] = set()
-            if i+1 < len(variant): direct_succession[t].add(variant[i+1])
+
+def get_alpha_relations(log, depth=2):
+    variants = get_variants_parsed(log)
+    
+    direct_succession = get_eventually_follows(log)
+    eventually_follows = get_eventually_follows(log, depth)
 
     causality_fn = lambda x, y: y in direct_succession[x] and not x in direct_succession[y]
     parallel_fn = lambda x, y: y in direct_succession[x] and x in direct_succession[y]
@@ -43,14 +52,18 @@ def get_alpha_relations(log):
                 if choice_fn(t, variant[i+1]):
                     choice[t].add(variant[i+1])
     dict_alpha_relations = {
-        "direct_succession": direct_succession, "causality":causality, "parallel":parallel, "choice":choice}
+        "direct_succession": direct_succession,
+        "eventually_follows": eventually_follows,
+        "causality":causality,
+        "parallel":parallel,
+        "choice":choice}
     return dict_alpha_relations
 
 
-def add_one_to_one(direct_succession, places):
+def add_one_to_one(follow_relation, places):
     new_places = set()
     new_places = new_places.union(places)
-    for src, dsts in direct_succession.items():
+    for src, dsts in follow_relation.items():
         for dst in sorted(list(dsts)):
             s = src + " ---> "
             s += dst + " "
@@ -60,11 +73,11 @@ def add_one_to_one(direct_succession, places):
     return new_places
 
 
-def add_one_to_many(direct_succession, parallel, places):
+def add_one_to_many(follow_relation, parallel, places):
     new_places = set()
     new_places = new_places.union(places)
     
-    for src, dsts in direct_succession.items():
+    for src, dsts in follow_relation.items():
         possible_outgoing_activities = []
 
         parallel_successors = set()
@@ -88,14 +101,14 @@ def add_one_to_many(direct_succession, parallel, places):
     return new_places
 
 
-def add_many_to_one(direct_succession, parallel, places):
+def add_many_to_one(follow_relation, parallel, places):
     new_places = set()
     new_places = new_places.union(places)
 
     direct_predecessors = {}
-    for activity in direct_succession.keys():
+    for activity in follow_relation.keys():
         if activity not in direct_predecessors: direct_predecessors[activity] = set()
-        for src, dsts in direct_succession.items():
+        for src, dsts in follow_relation.items():
             if activity in dsts:
                 direct_predecessors[activity].add(src)
     
@@ -123,14 +136,14 @@ def add_many_to_one(direct_succession, parallel, places):
     return new_places
 
 
-def add_many_to_many(direct_succession, parallel, places):
-    unique_activities = list(direct_succession.keys())
+def add_many_to_many(follow_relation, parallel, places):
+    unique_activities = list(follow_relation.keys())
     unique_activities.sort()
 
     direct_predecessors = {}
-    for activity in direct_succession.keys():
+    for activity in follow_relation.keys():
         if activity not in direct_predecessors: direct_predecessors[activity] = set()
-        for src, dsts in direct_succession.items():
+        for src, dsts in follow_relation.items():
             if activity in dsts:
                 direct_predecessors[activity].add(src)
 
@@ -148,7 +161,7 @@ def add_many_to_many(direct_succession, parallel, places):
         all_actual_predecessors = set()
 
         for s in src:
-            for follower in direct_succession[s]:
+            for follower in follow_relation[s]:
                 if s in parallel and follower in parallel[s]:
                     continue
                 all_actual_successors.add(follower)
@@ -182,15 +195,15 @@ def add_many_to_many(direct_succession, parallel, places):
 def add_places(net_places, alpha_relations):
     places = set()
     places.union(net_places)
-    
-    direct_succession = alpha_relations["direct_succession"]
+  
+    eventually_follows = alpha_relations["eventually_follows"]
     parallel = alpha_relations["parallel"]
 
-    places = add_one_to_one(direct_succession, places)
+    places = add_one_to_one(eventually_follows, places)
 
-    places = add_one_to_many(direct_succession, parallel, places)
-    places = add_many_to_one(direct_succession, parallel, places)
-    places = add_many_to_many(direct_succession, parallel, places)
+    places = add_one_to_many(eventually_follows, parallel, places)
+    places = add_many_to_one(eventually_follows, parallel, places)
+    places = add_many_to_many(eventually_follows, parallel, places)
 
     return places
 

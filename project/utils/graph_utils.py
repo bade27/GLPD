@@ -259,6 +259,8 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 		filter.append(mask[edge_index[0][i].item()] and mask[edge_index[1][i].item()])
 	edge_index = edge_index[:,filter]
 
+	direct_succession = ar["direct_succession"]
+
 	candidate_positions = set()
 
 	for src in places:
@@ -276,7 +278,7 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 	new_nodes = []
 	new_arcs = [[],[]]
 	# print([(nodes[i], nodes[j]) for (i,j) in candidate_positions])
-	print(ar)
+
 	for position in candidate_positions:
 		src, dst = position
 
@@ -286,7 +288,7 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 		for b in backward:
 			for f in forward:
 				# print(nodes[b],nodes[f])
-				if (b, f) in ar["->"] == "->":
+				if b in direct_succession and f in direct_succession[b]:
 					new_nodes.append("silent_" + no_silent)
 					new_arcs[0].append(b, new_idx)
 					new_arcs[1].append(new_idx, f)

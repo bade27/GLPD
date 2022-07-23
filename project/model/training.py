@@ -55,11 +55,12 @@ class Trainer():
 		return self.model
 		
 		
-	def train(self, epochs, patience, max_runs=100):
+	def train(self, epochs, patience, max_runs=1):
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
 
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		# self.device = 'cpu'
 
 		
 		if self.model_type == "supervised":
@@ -241,6 +242,8 @@ class Trainer():
 		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
 
 		self.model.eval()
+
+		self.test_dataset = self.valid_dataset
 
 		sound_nets = 0
 		connected = 0

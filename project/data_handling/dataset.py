@@ -105,7 +105,7 @@ class Dataset():
         self.statistics = statistics
 
 
-    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=1):
+    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=3):
 
         encoding = self.get_encoding()
 

@@ -43,7 +43,7 @@ if __name__ == '__main__':
         copy_after_split = os.path.join(base_dir, '..', "data_after_split")
 
         # generate data
-        dataset = Dataset(base_dir, model_type, random_features=True)
+        dataset = Dataset(base_dir, random_features=True)
         dataset.set_statistics(
             stats.mode, 
             stats.min, 
@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     
     if do_train:
-        trainer.train(50, 5)
+        trainer.train(1, 5)
 
 
         
