@@ -277,7 +277,6 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 	new_idx = torch.max(edge_index)
 	new_nodes = []
 	new_arcs = [[],[]]
-	# print([(nodes[i], nodes[j]) for (i,j) in candidate_positions])
 
 	for position in candidate_positions:
 		src, dst = position
@@ -287,7 +286,6 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 
 		for b in backward:
 			for f in forward:
-				# print(nodes[b],nodes[f])
 				if b in direct_succession and f in direct_succession[b]:
 					new_nodes.append("silent_" + no_silent)
 					new_arcs[0].append(b, new_idx)

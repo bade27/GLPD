@@ -29,7 +29,6 @@ def get_alpha_relations(log, depth=2):
     variants = get_variants_parsed(log)
     
     direct_succession = get_eventually_follows(log)
-    eventually_follows = get_eventually_follows(log, depth)
 
     causality_fn = lambda x, y: y in direct_succession[x] and not x in direct_succession[y]
     parallel_fn = lambda x, y: y in direct_succession[x] and x in direct_succession[y]
@@ -53,10 +52,14 @@ def get_alpha_relations(log, depth=2):
                     choice[t].add(variant[i+1])
     dict_alpha_relations = {
         "direct_succession": direct_succession,
-        "eventually_follows": eventually_follows,
         "causality":causality,
         "parallel":parallel,
         "choice":choice}
+
+    if depth > 1:
+        eventually_follows = get_eventually_follows(log, depth)
+        dict_alpha_relations["eventually_follows"] = eventually_follows
+
     return dict_alpha_relations
 
 
@@ -192,18 +195,26 @@ def add_many_to_many(follow_relation, parallel, places):
     return new_places
 
 
-def add_places(net_places, alpha_relations):
+def add_places(net_places, alpha_relations, further_than_one_hop=False):
     places = set()
-    places.union(net_places)
-  
-    eventually_follows = alpha_relations["eventually_follows"]
+    places = places.union(net_places)
+    
+    follows_relation_type = "eventually_follows" if further_than_one_hop else "direct_succession"
+    follows_relation = alpha_relations[follows_relation_type]
+
+    del follows_relation['<']
+    del follows_relation['|']
+    for key in follows_relation.keys():
+        if '|' in follows_relation[key]:
+            follows_relation[key].remove('|')
+
     parallel = alpha_relations["parallel"]
 
-    places = add_one_to_one(eventually_follows, places)
+    places = add_one_to_one(follows_relation, places)
 
-    places = add_one_to_many(eventually_follows, parallel, places)
-    places = add_many_to_one(eventually_follows, parallel, places)
-    places = add_many_to_many(eventually_follows, parallel, places)
+    places = add_one_to_many(follows_relation, parallel, places)
+    places = add_many_to_one(follows_relation, parallel, places)
+    places = add_many_to_many(follows_relation, parallel, places)
 
     return places
 

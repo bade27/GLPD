@@ -105,7 +105,7 @@ class Dataset():
         self.statistics = statistics
 
 
-    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=3):
+    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=5):
 
         encoding = self.get_encoding()
 
@@ -172,7 +172,7 @@ class Dataset():
                 new_df = build_arcs_dataframe(df_start_finish)
 
                 # alpha relations
-                dict_alpha_relations = get_alpha_relations(log)
+                dict_alpha_relations = get_alpha_relations(log, depth=1)
 
                 net_places = find_actual_places(net) # places of the original net
 
