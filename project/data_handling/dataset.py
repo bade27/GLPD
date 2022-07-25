@@ -105,7 +105,7 @@ class Dataset():
         self.statistics = statistics
 
 
-    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=3):
+    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=3, depth=1):
 
         encoding = self.get_encoding()
 
@@ -172,11 +172,11 @@ class Dataset():
                 new_df = build_arcs_dataframe(df_start_finish)
 
                 # alpha relations
-                dict_alpha_relations = get_alpha_relations(log, depth=2)
+                dict_alpha_relations = get_alpha_relations(log, depth=depth)
 
                 net_places = find_actual_places(net) # places of the original net
 
-                places = add_places(net_places, dict_alpha_relations, further_than_one_hop=True) # places of the input net
+                places = add_places(net_places, dict_alpha_relations, further_than_one_hop=depth>1) # places of the input net
 
                 # input net
                 input_net, input_im, input_fm = build_net_from_places(unique_activities, places)
@@ -250,7 +250,7 @@ class Dataset():
                     dump_to_pickle(os.path.join(self.networkx_dir, 'gx_' + str(number_of_models).zfill(pad)), graph)
 
 
-                variants = get_variants_parsed(log)
+                variants = get_variants_parsed(log, 20)
 
                 # save files
                 torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(number_of_models).zfill(pad) + ".pt"))
@@ -274,9 +274,6 @@ class Dataset():
                     assert x.shape[1] == w
 
                     torch.save(x, os.path.join(self.raw_dir, "x_" + str(number_of_models).zfill(pad) + ".pt"))
-                else:
-                    # assemble tgn data and move it into self.raw_dir with name x
-                    pass
 
 
 

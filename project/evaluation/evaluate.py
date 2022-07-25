@@ -36,7 +36,7 @@ class Evaluator():
             self.generalization[idx] = generalization
             self.simplicity[idx] = simplicity
 
-    def evaluate(self):
+    def evaluate(self, miner=False):
         logs_dir = os.path.join(self.base_dir, "logs")
         nets_dir = os.path.join(self.base_dir, "inference", "pnml")
         log_names = sorted(os.listdir(logs_dir))
@@ -48,7 +48,11 @@ class Evaluator():
             idx = get_idx(log_name)
 
             log = load_log_xes(os.path.join(logs_dir, log_name))
-            net, im, fm = load_petri_net(os.path.join(nets_dir, net_name))
+            if miner:
+                import pm4py
+                net, im, fm = pm4py.discover_petri_net_alpha(log)
+            else:
+                net, im, fm = load_petri_net(os.path.join(nets_dir, net_name))
 
             t_stop = threading.Event()
             t = threading.Thread(target=self.compute_statistics, args=(idx, log, net, im, fm, t_stop))
@@ -66,7 +70,11 @@ class Evaluator():
         for thread in self.threads:
             assert thread.is_alive() == False
         
-        self.df.to_csv(os.path.join(self.base_dir, "inference", f"results_{self.model_type}.csv"))
+        miner_name = "_alpha" if miner else ''
+        
+        mean = self.df[["perc_fit_traces","average_trace_fitness","precision","generalization","simplicity"]].mean(axis=0)
+        mean.to_csv(os.path.join(self.base_dir, "inference", f"mean_results_{self.model_type}{miner_name}.txt"), sep='\t')
+        self.df.to_csv(os.path.join(self.base_dir, "inference", f"results_{self.model_type}{miner_name}.csv"))
 
 
     def build_df(self):

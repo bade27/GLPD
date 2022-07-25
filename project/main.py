@@ -20,7 +20,7 @@ parser.add_argument("--train", action="store_true")
 parser.add_argument("--test", action="store_true")
 parser.add_argument("--model_type", type=str, default="selfsupervised")
 parser.add_argument("--optimizer", type=str, default="ADAM")
-parser.add_argument("--lr", type=float, default=1e-3)
+parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--gnn_type", type=str, default="gcn")
 parser.add_argument("--base_dir", type=str, default="/home/linuxpc/MEGAsync/all_data_tesi/data")
 
@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     
     if do_train:
-        trainer.train(10, 5, 100)
+        trainer.train(20, 5, 100)
 
 
         
@@ -81,3 +81,4 @@ if __name__ == '__main__':
         test_dir = os.path.join(base_dir, "test_graphs")
         evaluator = Evaluator(test_dir, model_type)
         evaluator.evaluate()
+        evaluator.evaluate(miner=True)

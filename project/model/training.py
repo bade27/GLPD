@@ -28,7 +28,7 @@ optimizer = {"ADAM":torch.optim.Adam, "SGD":torch.optim.SGD}
 
 
 class Trainer():
-	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None):
+	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None, random_features=True):
 		self.optimizer_name = optimizer_name
 		self.lr = lr
 		self.gnn_type = gnn_type
@@ -39,9 +39,9 @@ class Trainer():
 		self.optimizer = None
 		self.criterion = criterion
 
-		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"))
-		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"))
-		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"))
+		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), random_features=random_features)
+		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"), random_features=random_features)
+		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), random_features=random_features)
 
 		random.seed(1234)
 
@@ -53,6 +53,7 @@ class Trainer():
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.device = 'cpu'
 
 		
 		if self.model_type == "supervised":
@@ -92,7 +93,7 @@ class Trainer():
 			
 			sum_loss = 0
 			
-			# random.shuffle(elements)
+			random.shuffle(elements)
 			for i in tqdm(elements):
 				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
 				x = x.to(self.device)
@@ -111,13 +112,13 @@ class Trainer():
 
 					cumulative_loss.append(score.item())
 
-					if abs(score - prev_prob) < 1e-5:
+					if abs(score - prev_prob) < 1e-4:
 						break
 					
 					max_runs -= 1
 					if max_runs < 0:
 						break
-					
+
 				sum_loss += np.mean(cumulative_loss)
 			
 			epoch_loss.append(sum_loss)
@@ -227,6 +228,10 @@ class Trainer():
 
 	
 	def test(self):
+		if len(os.listdir(self.best_model_dir)) > 0:
+			file = os.listdir(self.best_model_dir)[0]
+			self.model.load_state_dict(torch.load(os.path.join(self.best_model_dir, file)))
+		
 		img_dir = os.path.join(self.inference_dir, "images")
 		pnml_dir = os.path.join(self.inference_dir, "pnml")
 		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")

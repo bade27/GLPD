@@ -24,7 +24,7 @@ class SelfSupPredictor(torch.nn.Module):
 			self.chooser.ready_for_training(nodes)
 			if self.training:
 				_ = self.forward_training(x, edge_index, original, y, nodes, variants)
-				return -self.chooser.get_score()
+				return -self.chooser.get_score() # / len(self.chooser.probabilities)
 			else:
 				return self.inference(x, edge_index, original, y, nodes, variants)
 
