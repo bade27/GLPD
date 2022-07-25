@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 import sys
 
 
@@ -45,22 +46,13 @@ class Trainer():
 		random.seed(1234)
 
 		self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
+		self.best_model_dir = os.path.join(base_dir, "..", "best_model")
 		self.inference_dir = os.path.join(base_dir, "test_graphs", "inference")
-		create_dirs([self.checkpoints_dir, self.inference_dir])
-		
-	def set_model(self, model):
-		self.model = model
-		
-	def get_model(self):
-		return self.model
-		
-		
-	def train(self, epochs, patience, max_runs=1):
+		create_dirs([self.checkpoints_dir, self.best_model_dir, self.inference_dir])
+
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
-
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		# self.device = 'cpu'
 
 		
 		if self.model_type == "supervised":
@@ -72,8 +64,16 @@ class Trainer():
 			
 		self.model = self.model.to(self.device)
 		self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
+
+		
+	def set_model(self, model):
+		self.model = model
+		
+	def get_model(self):
+		return self.model
 		
 		
+	def train(self, epochs, patience, max_runs=1):	
 		if self.model_type == 'supervised':
 			self.train_supervised(epochs, patience) 
 		else:
@@ -89,41 +89,34 @@ class Trainer():
 		
 		for epoch in range(epochs):
 			elements = [i for i in range(len(self.train_dataset))]
-			random.shuffle(elements)
 			
 			sum_loss = 0
 			
+			# random.shuffle(elements)
 			for i in tqdm(elements):
 				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
 				x = x.to(self.device)
 				edge_index = edge_index.to(self.device)
 				
 				cumulative_loss = []
-				prev_prediction = torch.zeros(len(nodes), 1, device=self.device)
-				prev_difference = float('+inf')
+				prev_prob = 0
 				
-				self.model.train()
-				self.optimizer.zero_grad()
-				prediction = self.model(x, edge_index, original, y, nodes, variants)
-				current_difference = difference(prediction, prev_prediction)
-				loss = -torch.sum(prediction)
-				loss.backward()
-				self.optimizer.step()
-				
-				cumulative_loss.append(loss.item())
-				max_runs -= 1
-				
-				while abs(prev_difference-current_difference) > 1e-5 and max_runs > 0:
-					prev_difference = current_difference
-					prev_prediction = prediction
+				while True:
 					self.model.train()
 					self.optimizer.zero_grad()
-					prediction = self.model(x, edge_index, original, y, nodes, variants)
-					loss = -torch.sum(prediction)
+					score = self.model(x, edge_index, original, y, nodes, variants)
+					loss = score
 					loss.backward()
 					self.optimizer.step()
-					current_difference = difference(prediction, prev_prediction)
+
+					cumulative_loss.append(score.item())
+
+					if abs(score - prev_prob) < 1e-5:
+						break
+					
 					max_runs -= 1
+					if max_runs < 0:
+						break
 					
 				sum_loss += np.mean(cumulative_loss)
 			
@@ -147,6 +140,9 @@ class Trainer():
 				
 		print(f"total epochs passed {no_epochs}")
 		print(f"best poch: {best_epoch}")
+		shutil.copy(
+			os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt"), 
+			os.path.join(self.best_model_dir, f"self_supervised_{best_epoch}.pt"))
 		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
 
 
@@ -243,8 +239,6 @@ class Trainer():
 
 		self.model.eval()
 
-		self.test_dataset = self.valid_dataset
-
 		sound_nets = 0
 		connected = 0
 		for i in tqdm(range(len(self.test_dataset))):
@@ -253,21 +247,23 @@ class Trainer():
 			x = x.to(self.device)
 			edge_index = edge_index.to(self.device)
 
-			mask = self.model(x, edge_index, original, y, nodes, variants)
+			places = self.model(x, edge_index, original, y, nodes, variants)
+
+			mask = ['p' not in n for n in nodes]
+			for place in places:
+				mask[place] = True
 
 			connected += int(is_graph_connected(original, mask))
 
-			result = [int(v) for v in mask]
+			assert sum(mask[:nodes.index('|')+1]) == nodes.index('|')+1
 
-			assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
-
-			alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
+			# alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
 			
-			new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
+			# new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
 
-			print(new_nodes)
+			# print(new_nodes)
 
-			net, im, fm = back_to_petri(original, nodes, result)
+			net, im, fm = back_to_petri(original, nodes, mask)
 
 			sound_nets += int(is_sound(net, im, fm))
 
