@@ -12,8 +12,9 @@ from utils.general_utils import load_pickle
 
 
 class MetaDataset(Dataset):
-  def __init__(self, base_dir):
+  def __init__(self, base_dir, random_features=False):
     self.base_dir = base_dir
+    self.random_features = random_features
     self.nodes_dir = os.path.join(self.base_dir, 'nodes')
     self.variant_dir = os.path.join(self.base_dir, 'variants')
     self.graph_dir = os.path.join(self.base_dir, 'raw')
@@ -23,7 +24,11 @@ class MetaDataset(Dataset):
     self.index_names = sorted([f for f in os.listdir(self.graph_dir) if 'graph' in f])
     self.original_names = sorted([f for f in os.listdir(self.graph_dir) if 'original' in f])
     self.y_names = sorted([f for f in os.listdir(self.graph_dir) if 'y' in f])
-    self.x_names = sorted([f for f in os.listdir(self.graph_dir) if 'x' in f])
+    if random_features:
+      self.x_names = sorted([f for f in os.listdir(self.graph_dir) if 'x' in f])
+    else:
+      self.x_names = [f for f in os.listdir(os.path.join(self.graph_dir, "features"))]
+      self.features_size = torch.load(os.path.join(self.graph_dir, "features", self.x_names[0])).shape[1]
 
   def __len__(self):
     assert len(self.index_names) == len(self.original_names)
@@ -45,9 +50,14 @@ class MetaDataset(Dataset):
     edge_index = torch.load(index_f)
     original = torch.load(original_f)
     y = torch.load(y_f)
-    x = torch.load(x_f)
     nodes = load_pickle(nodes_f)
     variants = load_pickle(variants_f)
-
+    if self.random_features:
+      x = torch.load(x_f)
+    else:
+      x = torch.load(x_f)
+      alphabets = [(chr(ord('a')+i)) for i in range(26)]
+      indices = [0] + [alphabets.index(n) for n in nodes] + [27]
+      x = x[indices,:]
 
     return x, edge_index, original, y, nodes, variants

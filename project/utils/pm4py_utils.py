@@ -68,7 +68,7 @@ def save_petri_net_to_img(net, initial_marking, final_marking, path):
 
 
 def save_log_xes(log, path):
-    xes_exporter.apply(log, path)
+    pm4py.write_xes(log, path)
 
 
 def load_log_xes(path):
@@ -103,17 +103,33 @@ def get_variants(log, reverse=True):
     return variants_count
 
 
-def get_variants_parsed(log):
+def get_variants_parsed(log, top=None):
+    if top != None:
+        filtered_log = pm4py.filter_variants_top_k(log, top)
+        log = filtered_log
+        
+    variants_log = pm4py.get_variants_as_tuples(log)
+    variants = list()
+    for variant_log in variants_log:
+        vl = list(variant_log)
+        vl = ['<'] + vl + ['|']
+        variants.append(vl)
+
+    return variants
+
+
+def get_variants_distribution_parsed(log):
     variants_count = case_statistics.get_variant_statistics(log)
     variants_count = sorted(variants_count, key=lambda x: x['count'], reverse=True)
 
+    total = sum([variant["count"] for variant in variants_count])
     variants = []
     for variant in variants_count:
         v = variant['variant'].split(',')
         v.insert(0, '<')
         v.append('|')
         c = variant['count']
-        d = {'variant': v, 'count': c}
+        d = {'variant': v, 'count': c/total}
         variants.append(d)
 
     return variants
