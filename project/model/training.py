@@ -1,9 +1,12 @@
 from pathlib import Path
+import shutil
 import sys
+
+
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
-
+import pm4py
 import os
 import numpy as np
 import torch
@@ -14,8 +17,8 @@ from model.self_supervised import SelfSupPredictor
 import random
 from model.supervised import SupervisedPredictor
 from utils.general_utils import create_dirs
-
-from utils.graph_utils import is_graph_connected
+from utils.general_utils import load_pickle
+from utils.graph_utils import is_graph_connected, add_silent_transitions
 from utils.petri_net_utils import back_to_petri
 from utils.pm4py_utils import is_sound, save_petri_net_to_img, save_petri_net_to_pnml
 
@@ -25,7 +28,7 @@ optimizer = {"ADAM":torch.optim.Adam, "SGD":torch.optim.SGD}
 
 
 class Trainer():
-	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None):
+	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None, random_features=True):
 		self.optimizer_name = optimizer_name
 		self.lr = lr
 		self.gnn_type = gnn_type
@@ -36,27 +39,22 @@ class Trainer():
 		self.optimizer = None
 		self.criterion = criterion
 
-		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"))
-		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"))
-		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"))
+		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), random_features=random_features)
+		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"), random_features=random_features)
+		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), random_features=random_features)
 
 		random.seed(1234)
 
 		self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
+		self.best_model_dir = os.path.join(base_dir, "..", "best_model")
 		self.inference_dir = os.path.join(base_dir, "test_graphs", "inference")
-		create_dirs([self.checkpoints_dir, self.inference_dir])
-		
-	def set_model(self, model):
-		self.model = model
-		
-	def get_model(self):
-		return self.model
-		
-		
-	def train(self, epochs, patience, max_runs=100):
+		create_dirs([self.checkpoints_dir, self.best_model_dir, self.inference_dir])
+
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.device = 'cpu'
+
 		
 		if self.model_type == "supervised":
 			output_size = st.output_size_sup
@@ -67,8 +65,16 @@ class Trainer():
 			
 		self.model = self.model.to(self.device)
 		self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
+
+		
+	def set_model(self, model):
+		self.model = model
+		
+	def get_model(self):
+		return self.model
 		
 		
+	def train(self, epochs, patience, max_runs=1):	
 		if self.model_type == 'supervised':
 			self.train_supervised(epochs, patience) 
 		else:
@@ -84,42 +90,35 @@ class Trainer():
 		
 		for epoch in range(epochs):
 			elements = [i for i in range(len(self.train_dataset))]
-			random.shuffle(elements)
 			
 			sum_loss = 0
 			
+			random.shuffle(elements)
 			for i in tqdm(elements):
 				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
 				x = x.to(self.device)
 				edge_index = edge_index.to(self.device)
 				
 				cumulative_loss = []
-				prev_prediction = torch.zeros(len(nodes), 1, device=self.device)
-				prev_difference = float('+inf')
+				prev_prob = 0
 				
-				self.model.train()
-				self.optimizer.zero_grad()
-				prediction = self.model(x, edge_index, original, y, nodes, variants)
-				current_difference = difference(prediction, prev_prediction)
-				loss = -torch.sum(prediction)
-				loss.backward()
-				self.optimizer.step()
-				
-				cumulative_loss.append(loss.item())
-				max_runs -= 1
-				
-				while abs(prev_difference-current_difference) > 1e-5 and max_runs > 0:
-					prev_difference = current_difference
-					prev_prediction = prediction
+				while True:
 					self.model.train()
 					self.optimizer.zero_grad()
-					prediction = self.model(x, edge_index, original, y, nodes, variants)
-					loss = -torch.sum(prediction)
+					score = self.model(x, edge_index, original, y, nodes, variants)
+					loss = score
 					loss.backward()
 					self.optimizer.step()
-					current_difference = difference(prediction, prev_prediction)
-					max_runs -= 1
+
+					cumulative_loss.append(score.item())
+
+					if abs(score - prev_prob) < 1e-4:
+						break
 					
+					max_runs -= 1
+					if max_runs < 0:
+						break
+
 				sum_loss += np.mean(cumulative_loss)
 			
 			epoch_loss.append(sum_loss)
@@ -142,6 +141,9 @@ class Trainer():
 				
 		print(f"total epochs passed {no_epochs}")
 		print(f"best poch: {best_epoch}")
+		shutil.copy(
+			os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt"), 
+			os.path.join(self.best_model_dir, f"self_supervised_{best_epoch}.pt"))
 		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
 
 
@@ -226,14 +228,19 @@ class Trainer():
 
 	
 	def test(self):
+		if len(os.listdir(self.best_model_dir)) > 0:
+			file = os.listdir(self.best_model_dir)[0]
+			self.model.load_state_dict(torch.load(os.path.join(self.best_model_dir, file)))
+		
 		img_dir = os.path.join(self.inference_dir, "images")
 		pnml_dir = os.path.join(self.inference_dir, "pnml")
+		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")
 
 		create_dirs([img_dir, pnml_dir])
 
-		idxes = [
-			int(name.split('_')[1].split('.')[0]) for name in os.listdir(
-				os.path.join(self.base_dir, "test_graphs", "logs"))]
+		idxes = [int(name.split('_')[1].split('.')[0]) for name in os.listdir(alpha_relations_dir)]
+
+		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
 
 		self.model.eval()
 
@@ -245,15 +252,23 @@ class Trainer():
 			x = x.to(self.device)
 			edge_index = edge_index.to(self.device)
 
-			mask = self.model(x, edge_index, original, y, nodes, variants)
+			places = self.model(x, edge_index, original, y, nodes, variants)
+
+			mask = ['p' not in n for n in nodes]
+			for place in places:
+				mask[place] = True
 
 			connected += int(is_graph_connected(original, mask))
 
-			result = [int(v) for v in mask]
+			assert sum(mask[:nodes.index('|')+1]) == nodes.index('|')+1
 
-			assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
+			# alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
+			
+			# new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
 
-			net, im, fm = back_to_petri(original, nodes, result)
+			# print(new_nodes)
+
+			net, im, fm = back_to_petri(original, nodes, mask)
 
 			sound_nets += int(is_sound(net, im, fm))
 

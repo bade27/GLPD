@@ -1,153 +1,100 @@
 from pathlib import Path
 import sys
+
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
 
-from itertools import combinations, product
 import re
-import pandas as pd
+import itertools
 from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.objects.petri_net.utils import petri_utils
-from utils.pm4py_utils import get_variants
+from utils.pm4py_utils import get_variants_parsed
 
 
-
-def alpha_relations(log):
-    variants_count = get_variants(log)
-
-    directly_follows = {}
-    for variant in variants_count:
-        activities = variant["variant"].split(',')
-        activities.insert(0, '<')
-        activities.append('|')
-        for i in range(len(activities)-1):
-            if activities[i] not in directly_follows:
-                directly_follows[activities[i]] = set()
-            directly_follows[activities[i]].add(activities[i+1])
-        if activities[-1] not in directly_follows:
-            directly_follows[activities[-1]] = set()
-
-    causality = lambda x, y: (y in directly_follows[x]) and not (x in directly_follows[y])
-    parallel = lambda x, y: (y in directly_follows[x]) and (x in directly_follows[y])
-    unrelated = lambda x, y: not (y in directly_follows[x]) and not (x in directly_follows[y])
-
-    unique_activities = directly_follows.keys()
-
-    relations = []
-    for x in unique_activities:
-        for y in unique_activities:
-            if causality(x, y):
-                if [x, y, "->"] not in relations:
-                    relations.append([x, y, "->"])
-                if [y, x, "<-"] not in relations:    
-                    relations.append([y, x, "<-"])
-            elif parallel(x, y):
-                if [x, y, "//"] not in relations:
-                    relations.append([x, y, "//"])
-                if [y, x, "//"] not in relations:
-                    relations.append([y, x, "//"])
-            elif unrelated(x, y):
-                relations.append([x, y, "#"])
-
-    df = pd.DataFrame(relations, columns=['X', 'Y','Z'])
-
-    df = df.pivot(index='X', columns='Y', values='Z').reset_index()
-
-    df.set_index("X", inplace=True)
-
-    return df
+def get_eventually_follows(log, depth=1):
+    variants = get_variants_parsed(log)
+    eventually_follows = {}
+    for d in range(0, depth):
+        for variant in variants:
+            for i, t in enumerate(variant):
+                if t not in eventually_follows: eventually_follows[t] = set()
+                if i+d+1 < len(variant): 
+                    eventually_follows[t].add(variant[i+d+1])
+    
+    return eventually_follows
 
 
-def add_dfg_rel(parent_of, places):
+def get_alpha_relations(log, depth=2):
+    variants = get_variants_parsed(log)
+    
+    direct_succession = get_eventually_follows(log)
+
+    causality_fn = lambda x, y: y in direct_succession[x] and not x in direct_succession[y]
+    parallel_fn = lambda x, y: y in direct_succession[x] and x in direct_succession[y]
+    choice_fn = lambda x, y: y not in direct_succession[x] and not x in direct_succession[y]
+
+    causality = {}
+    parallel = {}
+    choice = {}
+    for variant in variants:
+        for i, t in enumerate(variant):
+            if t not in causality: causality[t] = set()
+            if t not in parallel: parallel[t] = set()
+            if t not in choice: choice[t] = set()
+
+            if i+1 < len(variant):
+                if causality_fn(t, variant[i+1]):
+                    causality[t].add(variant[i+1])
+                if parallel_fn(t, variant[i+1]):
+                    parallel[t].add(variant[i+1])
+                if choice_fn(t, variant[i+1]):
+                    choice[t].add(variant[i+1])
+    dict_alpha_relations = {
+        "direct_succession": direct_succession,
+        "causality":causality,
+        "parallel":parallel,
+        "choice":choice}
+
+    if depth > 1:
+        eventually_follows = get_eventually_follows(log, depth)
+        dict_alpha_relations["eventually_follows"] = eventually_follows
+
+    return dict_alpha_relations
+
+
+def add_one_to_one(follow_relation, places):
     new_places = set()
     new_places = new_places.union(places)
-    for key, element in parent_of.items():
-        for val in sorted(list(element)):
-            s = key + " ---> "
-            s += val + " "
+    for src, dsts in follow_relation.items():
+        for dst in sorted(list(dsts)):
+            s = src + " ---> "
+            s += dst + " "
             new_places.add(s[:-1])
             s = ""
 
     return new_places
 
 
-def add_many_to_one_many_to_many(parent_of, parallel, places):
-    unique_activities = set(parent_of.keys()).difference(('<','|'))
-
-    unique_activities = list(unique_activities)
-    unique_activities.sort()
-
-    common_children = {}
-    for i in range(len(unique_activities)):
-        for j in range(len(unique_activities)):
-            if i != j:
-                if i in parallel and j in parallel[i]:
-                    continue
-                intersection = tuple(parent_of[unique_activities[i]].intersection(parent_of[unique_activities[j]]))
-                if '|' in intersection:
-                    idx = intersection.index('|')
-                    intersection = intersection[:idx] + intersection[idx+1:]
-                
-                if len(intersection) > 0:
-                    if intersection not in common_children:
-                        common_children[intersection] = set()
-                    common_children[intersection].add(unique_activities[i])
-                    common_children[intersection].add(unique_activities[j])
-
-    new_places = set()
-    new_places = new_places.union(places)
-
-    for dst, src in common_children.items():
-        output_combinations = []
-        input_combinations = []
-        for n in range(1, len(dst)+1):
-            comb = combinations(list(dst),n)
-            for c in comb:
-                output_combinations.append(c)
-        for n in range(1, len(src)+1):
-            comb = combinations(list(src),n)
-            for c in comb:
-                input_combinations.append(c)
-
-        cross_prod = product(input_combinations, output_combinations)
-        for cp in cross_prod:
-            s = ""
-            t = ""
-
-            for e in sorted(list(cp[0])):
-                s += e + " "
-            for e in sorted(list(cp[1])):
-                t += e + " "
-            if s.replace(' ','') != '' and t.replace(' ','') != '':
-                new_places.add(s + "---> " + t[:-1])
-
-    return new_places
-
-
-def add_one_to_many(parent_of, parallel, places):
+def add_one_to_many(follow_relation, parallel, places):
     new_places = set()
     new_places = new_places.union(places)
     
-    for key, element in parent_of.items():
-        possible_outgoing_places = []
-        all_children = sorted(list(element))
+    for src, dsts in follow_relation.items():
+        possible_outgoing_activities = []
 
-        # remove parallel from list
-        not_to_consider = set()
-        for child1 in all_children:
-            for child2 in all_children:
-                if child1 in parallel and child2 in parallel[child1]:
-                    not_to_consider.add(child1)
-                    not_to_consider.add(child2)
-                    
-        all_children = sorted(list(element.difference(not_to_consider)))
+        parallel_successors = set()
+        for dst in dsts:
+            if src in parallel and dst in parallel[src]:
+                parallel_successors.add(dst)
+
+        outgoing = dsts.difference(parallel_successors)
         
-        for n in range(1, len(all_children)+1):
-            comb = combinations(all_children, n)
+        for n in range(2, len(outgoing)+1):
+            comb = itertools.combinations(outgoing, n)
             for c in comb:
-                possible_outgoing_places.append(c)
-        cross_prod = product([key], possible_outgoing_places)
+                possible_outgoing_activities.append(c)
+        cross_prod = itertools.product([src], possible_outgoing_activities)
 
         for cp in cross_prod:
             s = cp[0] + ' ---> '
@@ -157,37 +104,119 @@ def add_one_to_many(parent_of, parallel, places):
     return new_places
 
 
-def add_places(dataframe, relations, net_places=None):
-    places = set()
+def add_many_to_one(follow_relation, parallel, places):
+    new_places = set()
+    new_places = new_places.union(places)
 
-    if net_places:
-        places.union(net_places)
+    direct_predecessors = {}
+    for activity in follow_relation.keys():
+        if activity not in direct_predecessors: direct_predecessors[activity] = set()
+        for src, dsts in follow_relation.items():
+            if activity in dsts:
+                direct_predecessors[activity].add(src)
     
-    causality = {}
-    parallel = {}
+    for dst, srcs in direct_predecessors.items():
+        possible_incoming_activities = []
 
-    for _, row in dataframe.iterrows():
-        if relations.loc[row["source"],row["destination"]] == "->":
-            if row["source"] not in causality:
-                causality[row["source"]] = set()
-            causality[row["source"]].add(row["destination"])
-        elif relations.loc[row["source"], row["destination"]] == "//":
-            if row["source"] not in parallel:
-                parallel[row["source"]] = set()
-            parallel[row["source"]].add(row["destination"])
+        parallel_predecessors = set()
+        for src in srcs:
+            if dst in parallel and src in parallel[dst]:
+                parallel_predecessors.add(src)
 
-    places = add_dfg_rel(causality, places)
+        incoming = dsts.difference(parallel_predecessors)
+        
+        for n in range(2, len(incoming)+1):
+            comb = itertools.combinations(incoming, n)
+            for c in comb:
+                possible_incoming_activities.append(c)
+        cross_prod = itertools.product(possible_incoming_activities, [dst])
 
-    place_start_end = set()
-    for place in places:
-        if '<' in place or '|' in place:
-            place_start_end.add(place)
-    places = places.difference(place_start_end)
+        for cp in cross_prod:
+            s = '---> ' + cp[1]
+            for x in cp[0]:
+                s = x + ' ' + s
+            new_places.add(s)
+    return new_places
 
-    places = add_one_to_many(causality, parallel, places)
-    places = add_many_to_one_many_to_many(causality, parallel, places)
 
-    return places.union(place_start_end)
+def add_many_to_many(follow_relation, parallel, places):
+    unique_activities = list(follow_relation.keys())
+    unique_activities.sort()
+
+    direct_predecessors = {}
+    for activity in follow_relation.keys():
+        if activity not in direct_predecessors: direct_predecessors[activity] = set()
+        for src, dsts in follow_relation.items():
+            if activity in dsts:
+                direct_predecessors[activity].add(src)
+
+    subsets = itertools.chain.from_iterable(
+        itertools.combinations(unique_activities, r) for r in range(1, len(unique_activities) + 1))
+
+    all_possible_io = itertools.product(subsets, subsets)
+    actual_io = set()
+
+    for pair in all_possible_io:
+        src = pair[0]
+        dst = pair[1]
+
+        all_actual_successors = set()
+        all_actual_predecessors = set()
+
+        for s in src:
+            for follower in follow_relation[s]:
+                if s in parallel and follower in parallel[s]:
+                    continue
+                all_actual_successors.add(follower)
+
+        for d in dst:
+            for predecessor in direct_predecessors[d]:
+                if d in parallel and predecessor in parallel[d]:
+                    continue
+                all_actual_predecessors.add(predecessor)
+
+        if src == all_actual_predecessors and dst == all_actual_successors:
+            actual_io.add((src, dst))
+
+    new_places = set()
+    new_places = new_places.union(places)
+
+    for io in actual_io:
+        s = ""
+        t = ""
+
+        for e in sorted(list(io[0])):
+            s += e + " "
+        for e in sorted(list(io[1])):
+            t += e + " "
+        if s.replace(' ','') != '' and t.replace(' ','') != '':
+            new_places.add(s + "---> " + t[:-1])
+
+    return new_places
+
+
+def add_places(net_places, alpha_relations, further_than_one_hop=False):
+    places = set()
+    places = places.union(net_places)
+    
+    follows_relation_type = "eventually_follows" if further_than_one_hop else "direct_succession"
+    follows_relation = alpha_relations[follows_relation_type]
+
+    del follows_relation['<']
+    del follows_relation['|']
+    for key in follows_relation.keys():
+        if '|' in follows_relation[key]:
+            follows_relation[key].remove('|')
+
+    parallel = alpha_relations["parallel"]
+
+    places = add_one_to_one(follows_relation, places)
+
+    places = add_one_to_many(follows_relation, parallel, places)
+    places = add_many_to_one(follows_relation, parallel, places)
+    places = add_many_to_many(follows_relation, parallel, places)
+
+    return places
 
 
 def find_actual_places(net):
