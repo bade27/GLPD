@@ -38,7 +38,7 @@ class Evaluator():
 
     def evaluate(self, miner=False):
         logs_dir = os.path.join(self.base_dir, "logs")
-        nets_dir = os.path.join(self.base_dir, "inference", "pnml")
+        nets_dir = os.path.join(self.base_dir, "saved_images_pnml","original_nets","pnml")
         log_names = sorted(os.listdir(logs_dir))
         net_names = sorted(os.listdir(nets_dir))
 

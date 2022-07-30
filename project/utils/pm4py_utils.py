@@ -104,7 +104,7 @@ def get_variants(log, reverse=True):
 
 
 def get_variants_parsed(log, top=None):
-    if top:
+    if top != None:
         filtered_log = pm4py.filter_variants_top_k(log, top)
         log = filtered_log
         
