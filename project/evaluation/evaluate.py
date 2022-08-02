@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import time
 
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
@@ -12,7 +13,7 @@ from utils.pm4py_utils import evaluate, load_log_xes, load_petri_net
 
 
 class Evaluator():
-    def __init__(self, base_dir, model_type, timeout=120):
+    def __init__(self, base_dir, model_type, timeout=60):
         self.base_dir = base_dir
         self.model_type = model_type
         self.timeout = timeout
@@ -28,42 +29,37 @@ class Evaluator():
         return self.df
     
 
-    def compute_statistics(self, idx, log, net, im, fm, t_stop):
+    def compute_statistics(self, idx, log, net, im, fm):
         fitness, precision, generalization, simplicity = evaluate(log, net, im, fm)
-        if not t_stop.is_set():
-            self.fitness[idx] = fitness
-            self.precision[idx] = precision
-            self.generalization[idx] = generalization
-            self.simplicity[idx] = simplicity
+        self.fitness[idx] = fitness
+        self.precision[idx] = precision
+        self.generalization[idx] = generalization
+        self.simplicity[idx] = simplicity
 
     def evaluate(self, miner=False):
         logs_dir = os.path.join(self.base_dir, "logs")
-        nets_dir = os.path.join(self.base_dir, "saved_images_pnml","original_nets","pnml")
+        nets_dir = os.path.join(self.base_dir, "inference","pnml")
         log_names = sorted(os.listdir(logs_dir))
         net_names = sorted(os.listdir(nets_dir))
 
         get_idx = lambda name: int(name.split('_')[1].split('.')[0])
 
+        logs = []
         for log_name, net_name in zip(log_names, net_names):
+            log = load_log_xes(os.path.join(logs_dir, log_name))
+            logs.append(log)
+
+        for i, log_name, net_name in zip(range(len(log_names)), log_names, net_names):
             idx = get_idx(log_name)
 
-            log = load_log_xes(os.path.join(logs_dir, log_name))
+            log = logs[i]
             if miner:
                 import pm4py
                 net, im, fm = pm4py.discover_petri_net_alpha(log)
             else:
                 net, im, fm = load_petri_net(os.path.join(nets_dir, net_name))
-
-            t_stop = threading.Event()
-            t = threading.Thread(target=self.compute_statistics, args=(idx, log, net, im, fm, t_stop))
-            t.start()
-            self.threads.append(t)
-
-            t.join(self.timeout + self.timeout//2)
-            if t.is_alive():
-                t_stop.set()
-
-            t.join()
+      
+            self.compute_statistics(idx, log, net, im, fm)
 
         self.build_df()
 

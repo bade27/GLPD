@@ -77,7 +77,7 @@ if __name__ == '__main__':
         
 
     if do_test:
-        trainer.test()
+        trainer.test(silent_transitions=True)
         test_dir = os.path.join(base_dir, "test_graphs")
         evaluator = Evaluator(test_dir, model_type)
         evaluator.evaluate()

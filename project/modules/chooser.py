@@ -1,7 +1,7 @@
 import torch
 from torch.distributions.categorical import Categorical
 from modules.decoder import DecoderMLP
-from utils.graph_utils import get_forward_star, get_next_activities, node_degree
+from utils.graph_utils import get_forward_star, get_next_activities
 
 
 class Chooser(torch.nn.Module):
@@ -64,35 +64,3 @@ class Chooser(torch.nn.Module):
 			else:
 				break
 		return chosen_places
-		
-		# if len(pool_of_places) == 1:
-		# 	sampled_place = pool_of_places[0]
-		# 	self.mask[sampled_place] = True
-		# 	self.chosen_nodes.append(sampled_place)
-		# 	self.probabilities.append(distribution[pool_of_places.index(sampled_place)].unsqueeze(-1))
-		# elif len(pool_of_places) > 1:
-		# 	sampler = Categorical(distribution)
-	
-		# 	sampled_places = set()
-		# 	sampled_places = sampled_places.union(set(self.chosen_nodes))
-		# 	sampled_indices = set()
-		# 	while True:
-		# 		discovered_next = get_next_activities(original, activity, self.mask)
-		# 		if connections != discovered_next:
-		# 			sampled_idx = None
-		# 			sampled_place = None
-		# 			count = 0
-		# 			while sampled_place in sampled_places.union({None}):
-		# 				sampled_idx = sampler.sample()
-		# 				sampled_place = pool_of_places[sampled_idx]
-		# 				count += 1
-		# 				if count > 1000:
-		# 					break
-		# 			print(count)
-		# 			self.mask[sampled_place] = True
-		# 			sampled_places.add(sampled_place)
-		# 			sampled_indices.add(sampled_idx)
-		# 			self.chosen_nodes.append(sampled_place)
-		# 			self.probabilities.append(distribution[sampled_idx].unsqueeze(-1))
-		# 		else:
-		# 			break

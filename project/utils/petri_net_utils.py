@@ -123,7 +123,7 @@ def add_many_to_one(follow_relation, parallel, places):
             if dst in parallel and src in parallel[dst]:
                 parallel_predecessors.add(src)
 
-        incoming = dsts.difference(parallel_predecessors)
+        incoming = srcs.difference(parallel_predecessors)
         
         for n in range(2, len(incoming)+1):
             comb = itertools.combinations(incoming, n)
@@ -226,8 +226,10 @@ def find_actual_places(net):
     end_places = set()
 
     def parse_element(element):
-        to_skip = ['"', "'", '(', ')', '{', '}', ',', ' ']
-        activities = [a for a in element if a not in to_skip]
+        to_skip = ['"', "'", '(', ')', '{', '}', ',']
+        for skip in to_skip:
+            element = element.replace(skip, ' ')
+        activities = [e for e in element.split(' ') if e != '']
         return sorted(activities)
 
     for i in n:
@@ -313,7 +315,10 @@ def back_to_petri(edge_index, nodes, mask):
         pn_dict[i] = place
         pn.places.add(place)
       else:
-        name = nodes[i] if nodes[i] != '<' and nodes[i] != '|' else None
+        if nodes[i] == '<' or nodes[i] == '|' or "silent" in nodes[i]:
+            name = None
+        else:
+            name = nodes[i]
         transition = PetriNet.Transition(nodes[i], name)
         pn_dict[i] = transition
         pn.transitions.add(transition)
