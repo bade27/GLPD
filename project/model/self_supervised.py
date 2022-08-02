@@ -1,11 +1,7 @@
-import random
 import torch
-from torch.distributions.categorical import Categorical
-from modules.decoder import DecoderMLP
-from modules.encoders import FirstEncoder, SecondEncoder
+from modules.encoders import FirstEncoder
 from modules.chooser import Chooser
 from modules.info_aggregator import InfoAggregator
-from utils.graph_utils import get_forward_star, get_next_activities, node_degree
 
 
 class SelfSupPredictor(torch.nn.Module):

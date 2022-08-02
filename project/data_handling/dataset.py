@@ -16,12 +16,12 @@ import networkx as nx
 from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_move_files
 from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, draw_networkx, get_backward_star, get_forward_star, mean_node_degree
 from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, find_actual_places
-from utils.pm4py_utils import display_petri_net, generate_trees, is_sound, generate_log, build_petri_net_from_log, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml
+from utils.pm4py_utils import display_petri_net, generate_trees, is_sound, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml
 from utils.petri_net_utils import back_to_petri
 import model.structure as model_structure
 import shutil
 from sklearn.preprocessing import KBinsDiscretizer
-import torch
+from data_handling import stats as st
 
 
 class Dataset():
@@ -38,7 +38,7 @@ class Dataset():
         self.networkx_dir = os.path.join(self.data_dir, 'networkx')
         self.alpha_relations_dir = os.path.join(self.graphs_dir, 'alpha_relations')
 
-        self.input_dir = os.path.join(self.saved_dir, "input_net")
+        self.input_dir = os.path.join(self.saved_dir, "input_nets")
         self.input_dir_imgs = os.path.join(self.input_dir, "images")
         self.input_dir_pnml = os.path.join(self.input_dir, "pnml")
         
@@ -134,15 +134,15 @@ class Dataset():
                 # log and initial df
                 tree = trees[i] if parameters["no_models"] > 1 else trees
                 net_ws, im_ws, fm_ws = pm4py.convert_to_petri_net(tree)
-                log_ws = pm4py.play_out(net_ws, im_ws, fm_ws, parameters={"no_traces":no_traces})
-                net, im, fm = pm4py.discover_petri_net_alpha(log_ws)
+                log = pm4py.play_out(net_ws, im_ws, fm_ws, parameters={"no_traces":no_traces})
+                net, im, fm = pm4py.discover_petri_net_alpha(log)
 
 
                 if not is_sound(net, im, fm):
                     continue
 
 
-                log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
+                # log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
                 
                 unique_activities = set()
 
@@ -176,7 +176,31 @@ class Dataset():
 
                 net_places = find_actual_places(net) # places of the original net
 
-                places = add_places(net_places, dict_alpha_relations, further_than_one_hop=depth>1) # places of the input net
+
+                net_loop = False
+                for place in net_places:
+                    elements = place.split("-->")
+                    src, dst = elements[0], elements[1]
+                    s = [x for x in src.split(' ') if x != '']
+                    d = [x for x in dst.split(' ') if x != '']
+                    if len(set(s).intersection(set(d))) != 0:
+                        net_loop = True
+                        break
+
+                places = add_places(net_places, dict_alpha_relations, further_than_one_hop=False) # places of the input net
+                
+
+                loop = False
+                for place in places:
+                    elements = place.split("-->")
+                    src, dst = elements[0], elements[1]
+                    s = [x for x in src.split(' ') if x != '']
+                    d = [x for x in dst.split(' ') if x != '']
+                    if len(set(s).intersection(set(d))) != 0:
+                        loop = True
+                        break
+                
+                assert net_loop == loop
 
                 # input net
                 input_net, input_im, input_fm = build_net_from_places(unique_activities, places)
@@ -479,15 +503,15 @@ class Dataset():
         test_alpha_relations_dir = os.path.join(test_graphs_dir, "alpha_relations")
 
         test_saved_dir = os.path.join(test_graphs_dir, "saved_images_pnml")
-        test_input_dir = os.path.join(test_saved_dir, "input_net")
+        test_input_dir = os.path.join(test_saved_dir, "input_nets")
         test_input_dir_imgs = os.path.join(test_input_dir, "images")
         test_input_dir_pnml = os.path.join(test_input_dir, "pnml")
 
-        test_original_dir = os.path.join(test_saved_dir, "original_net")
+        test_original_dir = os.path.join(test_saved_dir, "original_nets")
         test_original_dir_imgs = os.path.join(test_original_dir, "images")
         test_original_dir_pnml = os.path.join(test_original_dir, "pnml")
 
-        test_reconstructed_dir = os.path.join(test_saved_dir, "reconstructed_net")
+        test_reconstructed_dir = os.path.join(test_saved_dir, "reconstructed_nets")
         test_reconstructed_dir_imgs = os.path.join(test_reconstructed_dir, "images")
         test_reconstructed_dir_pnml = os.path.join(test_reconstructed_dir, "pnml")
 

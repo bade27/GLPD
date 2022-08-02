@@ -227,7 +227,7 @@ class Trainer():
 		return np.mean(accuracies)
 
 	
-	def test(self):
+	def test(self, silent_transitions=False):
 		if len(os.listdir(self.best_model_dir)) > 0:
 			file = os.listdir(self.best_model_dir)[0]
 			self.model.load_state_dict(torch.load(os.path.join(self.best_model_dir, file)))
@@ -239,6 +239,7 @@ class Trainer():
 		create_dirs([img_dir, pnml_dir])
 
 		idxes = [int(name.split('_')[1].split('.')[0]) for name in os.listdir(alpha_relations_dir)]
+		assert len(idxes) == len(self.test_dataset)
 
 		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
 
@@ -246,6 +247,7 @@ class Trainer():
 
 		sound_nets = 0
 		connected = 0
+
 		for i in tqdm(range(len(self.test_dataset))):
 			x, edge_index, original, y, nodes, variants = self.test_dataset[i]
 
@@ -262,16 +264,35 @@ class Trainer():
 
 			assert sum(mask[:nodes.index('|')+1]) == nodes.index('|')+1
 
-			# alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
-			
-			# new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
+			if silent_transitions:
+				alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
+				new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
 
-			# print(new_nodes)
+				for _ in range(len(new_nodes) - len(nodes)):
+					mask.append(True)
 
-			net, im, fm = back_to_petri(original, nodes, mask)
+				excluded = set([i for i in range(len(mask)) if not mask[i]])
+				to_check = set()
+				for item in excluded:
+					for h in range(len(edge_index[0])):
+						if edge_index[0][h].item() == item:
+							to_check.add(edge_index[1][h].item())
+						elif edge_index[1][h].item() == item:
+							to_check.add(edge_index[0][h].item())
+				for t in to_check:
+					if "silent" in nodes[t]:
+						excluded.add(t)
 
+				for k in range(len(mask)):
+					if i in excluded:
+						mask[k] = False
+			else:
+				new_edge_index = original
+				new_nodes = nodes
+
+
+			net, im, fm = back_to_petri(new_edge_index, new_nodes, mask)
 			sound_nets += int(is_sound(net, im, fm))
-
 			name = self.model_type + '_' + str(idxes[i])
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))

@@ -253,28 +253,25 @@ def mean_node_degree(nodes, edge_index):
 
 def add_silent_transitions(edge_index, mask, nodes, ar):
 	places = [idx for idx in range(nodes.index('|')+1, len(nodes))]
-	
-	filter = []
-	for i in range(len(edge_index[0])):
-		filter.append(mask[edge_index[0][i].item()] and mask[edge_index[1][i].item()])
-	edge_index = edge_index[:,filter]
 
 	direct_succession = ar["direct_succession"]
 
 	candidate_positions = set()
 
-	for src in places:
-		for dst in places:
-			if src != dst and mask[src] and mask[dst]:
-				forward, _ = get_forward_star(edge_index, src)
-				backward, _ = get_backward_star(edge_index, dst)
-
-				if len(set(forward).intersection(set(backward))) > 0:
-					candidate_positions.add((src, dst))
-
+	following_places = {}
+	for place in places:
+		following_places[place] = set()
+		if mask[place]:
+			forward, _ = get_forward_star(edge_index, place)
+			for activity in forward:
+				next_places, _ = get_forward_star(edge_index, activity)
+				for np in next_places:
+					if mask[np]:
+						following_places[place].add(np)
+						candidate_positions.add((place, np))
 	
 	no_silent = 0
-	new_idx = torch.max(edge_index)
+	new_idx = torch.max(edge_index) + 1
 	new_nodes = []
 	new_arcs = [[],[]]
 
@@ -286,22 +283,23 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 
 		for b in backward:
 			for f in forward:
-				if b in direct_succession and f in direct_succession[b]:
-					new_nodes.append("silent_" + no_silent)
-					new_arcs[0].append(b, new_idx)
-					new_arcs[1].append(new_idx, f)
+				if nodes[b] in direct_succession and nodes[f] in direct_succession[nodes[b]]:
+					new_nodes.append("silent_" + str(no_silent))
+					new_arcs[0].append(src)
+					new_arcs[1].append(new_idx.item())
+					new_arcs[0].append(new_idx.item())
+					new_arcs[1].append(dst)
 					new_idx += 1
 					no_silent += 1
 
-
 	if len(new_nodes) > 0:
-		new_edge_index_0 = torch.cat((edge_index[0].unsqueeze(-1), torch.tensor(new_arcs[0]).unsqueeze(-1)), dim=1)
-		new_edge_index_1 = torch.cat((edge_index[1].unsqueeze(-1), torch.tensor(new_arcs[1]).unsqueeze(-1)), dim=1)
-
+		new_edge_index_0 = torch.tensor(new_arcs[0])
+		new_edge_index_0 = torch.reshape(new_edge_index_0, (1, new_edge_index_0.shape[0]))
+		new_edge_index_1 = torch.tensor(new_arcs[1])
+		new_edge_index_1 = torch.reshape(new_edge_index_1, (1, new_edge_index_1.shape[0]))
 		new_edge_index = torch.cat((new_edge_index_0, new_edge_index_1), dim=0)
+		edge_index = torch.cat((edge_index, new_edge_index), dim=1)
 
-		new_nodes = nodes + new_nodes
-
-		return new_edge_index, new_nodes
+		nodes = nodes + new_nodes
 	
 	return edge_index, nodes
