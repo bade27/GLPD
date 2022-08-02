@@ -274,7 +274,7 @@ class Dataset():
                     dump_to_pickle(os.path.join(self.networkx_dir, 'gx_' + str(number_of_models).zfill(pad)), graph)
 
 
-                variants = get_variants_parsed(log, 20)
+                variants = get_variants_parsed(log, 30)
 
                 # save files
                 torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(number_of_models).zfill(pad) + ".pt"))
