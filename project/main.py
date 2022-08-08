@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     
     if do_train:
-        trainer.train(20, 5, 100)
+        trainer.train(5, 5, 100)
 
 
         

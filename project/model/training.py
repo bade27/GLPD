@@ -106,6 +106,8 @@ class Trainer():
 					self.model.train()
 					self.optimizer.zero_grad()
 					score = self.model(x, edge_index, original, y, nodes, variants)
+					# print(score)
+					# print('*'*50)
 					loss = score
 					loss.backward()
 					self.optimizer.step()
