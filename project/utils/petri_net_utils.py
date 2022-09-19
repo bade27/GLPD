@@ -10,6 +10,7 @@ import itertools
 from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.objects.petri_net.utils import petri_utils
 from utils.pm4py_utils import get_variants_parsed
+from pm4py.objects.petri_net.utils import reduction
 
 
 def get_eventually_follows(log, depth=1):
@@ -24,6 +25,17 @@ def get_eventually_follows(log, depth=1):
     
     return eventually_follows
 
+def reduce_silent_transitions(net, im, fm):
+    reduction.apply_fst_rule(net)
+    reduction.apply_fsp_rule(net, im, fm)
+    reduction.apply_fpt_rule(net)
+    reduction.apply_fpp_rule(net, im)
+    reduction.apply_elt_rule(net)
+    reduction.apply_elp_rule(net, im)
+    # net = reduction.apply_a_rule(net)
+    reduction.apply_r_rule(net)
+
+    return net, im, fm
 
 def get_alpha_relations(log, depth=2):
     variants = get_variants_parsed(log)
