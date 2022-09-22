@@ -93,10 +93,9 @@ def generate_features(dataframe, tg, n):
 	return df
 
 
-def build_graph(unique_activities, places, encoding, net_places={None}):
+def build_graph(unique_activities, places, encoding):
 	G = nx.DiGraph()
 
-	y = []
 	nodes = []
 	place_io = []
 	place_in = {}
@@ -106,7 +105,6 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 		if name in unique_activities:
 			G.add_node(name)
 			nodes.append(name)
-			y.append(1)
 
 	for idx, place in enumerate(places):
 		tail = []
@@ -130,7 +128,6 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 		G.add_node(pname)
 		if pname not in nodes:
 			nodes.append(pname)
-			y.append(int(place in net_places))
 
 		for e in tail:
 			G.add_edge(e, pname)
@@ -142,7 +139,7 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 	assert len(place_in) > 0 and len(place_in) > 0
 	place_io = [place_in, place_out]
 
-	return G, y, nodes, place_io
+	return G, nodes, place_io
 
 
 def draw_networkx(g):

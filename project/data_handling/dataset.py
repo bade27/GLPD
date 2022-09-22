@@ -1,7 +1,6 @@
 from pathlib import Path
 import sys
 
-
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
@@ -15,9 +14,8 @@ from tqdm import tqdm
 import networkx as nx
 from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_move_files
 from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, draw_networkx, get_backward_star, get_forward_star, mean_node_degree
-from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, find_actual_places
+from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, find_actual_places, reduce_silent_transitions, back_to_petri
 from utils.pm4py_utils import display_petri_net, generate_trees, is_sound, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml
-from utils.petri_net_utils import back_to_petri
 import model.structure as model_structure
 import shutil
 from sklearn.preprocessing import KBinsDiscretizer
@@ -46,9 +44,9 @@ class Dataset():
         self.original_dir_imgs = os.path.join(self.original_dir, "images")
         self.original_dir_pnml = os.path.join(self.original_dir, "pnml")
 
-        self.reconstr_dir = os.path.join(self.saved_dir, "reconstructed_nets")
-        self.reconstr_dir_imgs = os.path.join(self.reconstr_dir, "images")
-        self.reconstr_dir_pnml = os.path.join(self.reconstr_dir, "pnml")
+        # self.reconstr_dir = os.path.join(self.saved_dir, "reconstructed_nets")
+        # self.reconstr_dir_imgs = os.path.join(self.reconstr_dir, "images")
+        # self.reconstr_dir_pnml = os.path.join(self.reconstr_dir, "pnml")
 
 
         self.dirs = [
@@ -56,8 +54,8 @@ class Dataset():
             self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
             self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
             self.input_dir, self.input_dir_imgs, self.input_dir_pnml,
-            self.original_dir, self.original_dir_imgs, self.original_dir_pnml,
-            self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml
+            self.original_dir, self.original_dir_imgs, self.original_dir_pnml
+            # self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml
             ]
 
         create_dirs(self.dirs)
@@ -70,7 +68,7 @@ class Dataset():
 
     def get_encoding(self):
         encoding = {}
-        encoding["<"] = 0
+        encoding[">"] = 0
         for k in range(97,123):
             encoding[chr(k)] = k-97+1
         encoding["|"] = 27
@@ -105,7 +103,7 @@ class Dataset():
         self.statistics = statistics
 
 
-    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=3, depth=1):
+    def generate_dataset(self, save_networkx = False, save_images = False, save_models = False, visualize_nets = False, redundancy=1, depth=1):
 
         encoding = self.get_encoding()
 
@@ -134,14 +132,13 @@ class Dataset():
                 # log and initial df
                 tree = trees[i] if parameters["no_models"] > 1 else trees
                 net_ws, im_ws, fm_ws = pm4py.convert_to_petri_net(tree)
-                log = pm4py.play_out(net_ws, im_ws, fm_ws, parameters={"no_traces":no_traces})
-                net, im, fm = pm4py.discover_petri_net_alpha(log)
 
-
-                if not is_sound(net, im, fm):
-                    continue
-
-
+                net, im, fm = reduce_silent_transitions(net_ws, im_ws, fm_ws)
+                log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
+                
+                # net, im, fm = pm4py.discover_petri_net_alpha(log)
+                # if not is_sound(net, im, fm):
+                #     continue
                 # log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
                 
                 unique_activities = set()
@@ -154,18 +151,18 @@ class Dataset():
         
                 # unique_activities = set([transition.name for transition in net.transitions])
 
-                # insert special activities '<' (start) and '|' (finish)
+                # insert special activities '>' (start) and '|' (finish)
                 df_start_finish = pd.DataFrame()
                 for case in df["case"].unique():
                     current_case = df[df["case"]==case].copy()
-                    df_start = pd.DataFrame({"activity":'<', "timestamp":None, "case":case},index=[0])
+                    df_start = pd.DataFrame({"activity":'>', "timestamp":None, "case":case},index=[0])
                     df_finish = pd.DataFrame({"activity":'|', "timestamp":None, "case":case},index=[0])
                     df_start_finish = pd.concat([df_start_finish, df_start], axis=0)
                     df_start_finish = pd.concat([df_start_finish, current_case], axis=0)
                     df_start_finish = pd.concat([df_start_finish, df_finish], axis=0)
                     df_start_finish.reset_index(drop=True,inplace=True)
 
-                unique_activities.add('<')
+                unique_activities.add('>')
                 unique_activities.add('|')
 
                 # new dataframe to manipulate
@@ -174,39 +171,15 @@ class Dataset():
                 # alpha relations
                 dict_alpha_relations = get_alpha_relations(log, depth=depth)
 
-                net_places = find_actual_places(net) # places of the original net
+                # net_places = find_actual_places(net) # places of the original net
 
-
-                net_loop = False
-                for place in net_places:
-                    elements = place.split("-->")
-                    src, dst = elements[0], elements[1]
-                    s = [x for x in src.split(' ') if x != '']
-                    d = [x for x in dst.split(' ') if x != '']
-                    if len(set(s).intersection(set(d))) != 0:
-                        net_loop = True
-                        break
-
-                places = add_places(net_places, dict_alpha_relations, further_than_one_hop=False) # places of the input net
-                
-
-                loop = False
-                for place in places:
-                    elements = place.split("-->")
-                    src, dst = elements[0], elements[1]
-                    s = [x for x in src.split(' ') if x != '']
-                    d = [x for x in dst.split(' ') if x != '']
-                    if len(set(s).intersection(set(d))) != 0:
-                        loop = True
-                        break
-                
-                assert net_loop == loop
+                places = add_places(dict_alpha_relations, further_than_one_hop=False) # places of the input net
 
                 # input net
                 input_net, input_im, input_fm = build_net_from_places(unique_activities, places)
 
                 # networkx graph of the new net
-                graph, y, nodes, _ = build_graph(unique_activities, places, encoding, net_places)
+                graph, nodes, _ = build_graph(unique_activities, places, encoding)
 
                 adj = nx.to_numpy_matrix(graph)
 
@@ -234,13 +207,7 @@ class Dataset():
                 edge_index = torch.stack(
                     (torch.tensor(edge_index_0, dtype=torch.long), torch.tensor(edge_index_1, dtype=torch.long)), dim=0)
 
-                assert len(y) >= torch.max(edge_index[0])
-                assert len(y) >= torch.max(edge_index[1])
-
-                target = torch.tensor(y)
-
                 assert len(edge_index[0]) == len(edge_index[1])
-                assert len(nodes) == len(target)
 
                 # temporal graph
                 temporal_graph = build_temp_graph(new_df)
@@ -250,25 +217,22 @@ class Dataset():
                 new_df_features = generate_features(df_correct_order, temporal_graph, statistics['no_features'])
                 data = pd.concat([data, new_df_features], axis=0)
                 data.reset_index(drop=True, inplace=True)
-
-
-                rec_net, rec_im, rec_fm = back_to_petri(original_edge_index, nodes, y)
                 
                 if visualize_nets:
                     draw_networkx(graph)
                     display_petri_net(input_net, input_im, input_fm)
                     display_petri_net(net, im, fm)
-                    display_petri_net(rec_net, rec_im, rec_fm)
+                    # display_petri_net(rec_net, rec_im, rec_fm)
 
                 if save_images:
                     save_petri_net_to_img(input_net, input_im, input_fm, os.path.join(self.input_dir, "images", "input_" + str(number_of_models).zfill(pad) + '.png'))
                     save_petri_net_to_img(net, im, fm, os.path.join(self.original_dir, "images", "original_" + str(number_of_models).zfill(pad) + '.png'))
-                    save_petri_net_to_img(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "images", "rec_" + str(number_of_models).zfill(pad) + '.png'))
+                    # save_petri_net_to_img(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "images", "rec_" + str(number_of_models).zfill(pad) + '.png'))
 
                 if save_models:
                     save_petri_net_to_pnml(input_net, input_im, input_fm, os.path.join(self.input_dir, "pnml", "input_" + str(number_of_models).zfill(pad) + '.pnml'))
                     save_petri_net_to_pnml(net, im, fm, os.path.join(self.original_dir, "pnml", "original_" + str(number_of_models).zfill(pad) + '.pnml'))
-                    save_petri_net_to_pnml(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "pnml", "rec_" + str(number_of_models).zfill(pad) + '.pnml'))
+                    # save_petri_net_to_pnml(rec_net, rec_im, rec_fm, os.path.join(self.reconstr_dir, "pnml", "rec_" + str(number_of_models).zfill(pad) + '.pnml'))
 
                 if save_networkx:
                     dump_to_pickle(os.path.join(self.networkx_dir, 'gx_' + str(number_of_models).zfill(pad)), graph)
@@ -279,7 +243,6 @@ class Dataset():
                 # save files
                 torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(number_of_models).zfill(pad) + ".pt"))
                 torch.save(original_edge_index, os.path.join(self.raw_dir, "original_" + str(number_of_models).zfill(pad) + ".pt"))
-                torch.save(target, os.path.join(self.raw_dir, "y_" + str(number_of_models).zfill(pad) + ".pt"))
 
                 if self.random_features:
                     h = torch.max(edge_index)+1
@@ -339,7 +302,7 @@ class Dataset():
 
         dataset.to_csv(os.path.join(self.data_dir, 'tmp_data.csv'), index=False)
 
-        assert len(os.listdir(self.logs_dir)) * 4 == len(os.listdir(self.raw_dir))
+        assert len(os.listdir(self.logs_dir)) * 3 == len(os.listdir(self.raw_dir))
 
         print(f"{number_of_models}/{statistics['no_models']*statistics['no_datasets']*redundancy}")
 
@@ -454,15 +417,15 @@ class Dataset():
         train_original_dir_imgs = os.path.join(train_original_dir, "images")
         train_original_dir_pnml = os.path.join(train_original_dir, "pnml")
 
-        train_reconstructed_dir = os.path.join(train_saved_dir, "reconstructed_net")
-        train_reconstructed_dir_imgs = os.path.join(train_reconstructed_dir, "images")
-        train_reconstructed_dir_pnml = os.path.join(train_reconstructed_dir, "pnml")
+        # train_reconstructed_dir = os.path.join(train_saved_dir, "reconstructed_net")
+        # train_reconstructed_dir_imgs = os.path.join(train_reconstructed_dir, "images")
+        # train_reconstructed_dir_pnml = os.path.join(train_reconstructed_dir, "pnml")
 
         train_dirs = [
             train_graphs_dir, train_logs_dir, train_nodes_dir, train_raw_dir, train_variants_dir,
             train_alpha_relations_dir, train_saved_dir, train_input_dir, train_input_dir_imgs, 
-            train_input_dir_pnml, train_original_dir, train_original_dir_imgs, train_original_dir_pnml,
-            train_reconstructed_dir, train_reconstructed_dir_imgs, train_reconstructed_dir_pnml]
+            train_input_dir_pnml, train_original_dir, train_original_dir_imgs, train_original_dir_pnml]
+            # train_reconstructed_dir, train_reconstructed_dir_imgs, train_reconstructed_dir_pnml]
 
 
         # val dirs
@@ -482,16 +445,16 @@ class Dataset():
         validation_original_dir_imgs = os.path.join(validation_original_dir, "images")
         validation_original_dir_pnml = os.path.join(train_original_dir, "pnml")
 
-        validation_reconstructed_dir = os.path.join(validation_saved_dir, "reconstructed_net")
-        validation_reconstructed_dir_imgs = os.path.join(validation_reconstructed_dir, "images")
-        validation_reconstructed_dir_pnml = os.path.join(validation_reconstructed_dir, "pnml")
+        # validation_reconstructed_dir = os.path.join(validation_saved_dir, "reconstructed_net")
+        # validation_reconstructed_dir_imgs = os.path.join(validation_reconstructed_dir, "images")
+        # validation_reconstructed_dir_pnml = os.path.join(validation_reconstructed_dir, "pnml")
 
         validation_dirs =[
             validation_graphs_dir, validation_logs_dir, validation_alpha_relations_dir,
             validation_nodes_dir, validation_raw_dir, validation_variants_dir,
             validation_saved_dir, validation_input_dir, validation_input_dir_imgs, validation_input_dir_pnml,
-            validation_original_dir, validation_original_dir_imgs, validation_original_dir_pnml,
-            validation_reconstructed_dir, validation_reconstructed_dir_imgs, validation_reconstructed_dir_pnml]
+            validation_original_dir, validation_original_dir_imgs, validation_original_dir_pnml]
+            # validation_reconstructed_dir, validation_reconstructed_dir_imgs, validation_reconstructed_dir_pnml]
 
 
         # test dirs
@@ -511,14 +474,14 @@ class Dataset():
         test_original_dir_imgs = os.path.join(test_original_dir, "images")
         test_original_dir_pnml = os.path.join(test_original_dir, "pnml")
 
-        test_reconstructed_dir = os.path.join(test_saved_dir, "reconstructed_nets")
-        test_reconstructed_dir_imgs = os.path.join(test_reconstructed_dir, "images")
-        test_reconstructed_dir_pnml = os.path.join(test_reconstructed_dir, "pnml")
+        # test_reconstructed_dir = os.path.join(test_saved_dir, "reconstructed_nets")
+        # test_reconstructed_dir_imgs = os.path.join(test_reconstructed_dir, "images")
+        # test_reconstructed_dir_pnml = os.path.join(test_reconstructed_dir, "pnml")
 
         test_dirs = [test_graphs_dir, test_logs_dir, test_nodes_dir, test_raw_dir, test_variants_dir,
             test_saved_dir, test_input_dir, test_input_dir_imgs, test_input_dir_pnml,
-            test_alpha_relations_dir, test_original_dir, test_original_dir_imgs, test_original_dir_pnml,
-            test_reconstructed_dir, test_reconstructed_dir_imgs, test_reconstructed_dir_pnml]
+            test_alpha_relations_dir, test_original_dir, test_original_dir_imgs, test_original_dir_pnml]
+            # test_reconstructed_dir, test_reconstructed_dir_imgs, test_reconstructed_dir_pnml]
 
         
 
@@ -617,17 +580,17 @@ class Dataset():
             train_graphs, valid_graphs, test_graphs
             )
     
-        split_move_files(
-            self.reconstr_dir_imgs,
-            [train_reconstructed_dir_imgs, validation_reconstructed_dir_imgs, test_reconstructed_dir_imgs], 
-            train_graphs, valid_graphs, test_graphs
-            )
-            
-        split_move_files(
-            self.reconstr_dir_pnml,
-            [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
-            train_graphs, valid_graphs, test_graphs
-            )
+        # split_move_files(
+        #     self.reconstr_dir_imgs,
+        #     [train_reconstructed_dir_imgs, validation_reconstructed_dir_imgs, test_reconstructed_dir_imgs], 
+        #     train_graphs, valid_graphs, test_graphs
+        #     )
+        #     
+        # split_move_files(
+        #     self.reconstr_dir_pnml,
+        #     [train_reconstructed_dir_pnml, validation_reconstructed_dir_pnml, test_reconstructed_dir_pnml], 
+        #     train_graphs, valid_graphs, test_graphs
+        #     )
 
         # split and move alpha relations ####################################################################################
         split_move_files(

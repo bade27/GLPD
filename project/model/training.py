@@ -95,7 +95,7 @@ class Trainer():
 			
 			random.shuffle(elements)
 			for i in tqdm(elements):
-				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
+				x, edge_index, original, nodes, variants = self.train_dataset[i]
 				x = x.to(self.device)
 				edge_index = edge_index.to(self.device)
 				
@@ -105,7 +105,7 @@ class Trainer():
 				while True:
 					self.model.train()
 					self.optimizer.zero_grad()
-					score = self.model(x, edge_index, original, y, nodes, variants)
+					score = self.model(x, edge_index, original, nodes, variants)
 					# print(score)
 					# print('*'*50)
 					loss = score
@@ -251,12 +251,12 @@ class Trainer():
 		connected = 0
 
 		for i in tqdm(range(len(self.test_dataset))):
-			x, edge_index, original, y, nodes, variants = self.test_dataset[i]
+			x, edge_index, original, nodes, variants = self.test_dataset[i]
 
 			x = x.to(self.device)
 			edge_index = edge_index.to(self.device)
 
-			places = self.model(x, edge_index, original, y, nodes, variants)
+			places = self.model(x, edge_index, original, nodes, variants)
 
 			mask = ['p' not in n for n in nodes]
 			for place in places:

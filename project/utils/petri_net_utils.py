@@ -5,6 +5,7 @@ path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
 
+import copy
 import re
 import itertools
 from pm4py.objects.petri_net.obj import PetriNet, Marking
@@ -207,18 +208,25 @@ def add_many_to_many(follow_relation, parallel, places):
     return new_places
 
 
-def add_places(net_places, alpha_relations, further_than_one_hop=False):
+def add_places(alpha_relations, further_than_one_hop=False):
     places = set()
-    places = places.union(net_places)
     
     follows_relation_type = "eventually_follows" if further_than_one_hop else "direct_succession"
     follows_relation = alpha_relations[follows_relation_type]
 
-    del follows_relation['<']
+    start_activities = set()
+    end_activities = set()
+
+    for start_activity in follows_relation['>']:
+        start_activities.add(start_activity)
+
+    del follows_relation['>']
     del follows_relation['|']
+
     for key in follows_relation.keys():
         if '|' in follows_relation[key]:
             follows_relation[key].remove('|')
+            end_activities.add(key)
 
     parallel = alpha_relations["parallel"]
 
@@ -227,6 +235,14 @@ def add_places(net_places, alpha_relations, further_than_one_hop=False):
     places = add_one_to_many(follows_relation, parallel, places)
     places = add_many_to_one(follows_relation, parallel, places)
     places = add_many_to_many(follows_relation, parallel, places)
+
+    start_activities = sorted(list(start_activities))
+    end_activities = sorted(list(end_activities))
+    start_place = "> ---> " + ' '.join(start_activities)
+    end_place = ' '.join(end_activities) + " ---> |"
+
+    places.add(start_place)
+    places.add(end_place)
 
     return places
 
@@ -246,9 +262,22 @@ def find_actual_places(net):
 
     for i in n:
         if i.name != "start" and i.name != "end":
-            elements = re.findall(r"({[^{}]+})", i.name)
-            sources = parse_element(elements[0])
-            targets = parse_element(elements[1])
+            # elements = re.findall(r"({[^{}]+})", i.name)
+            # sources = parse_element(elements[0])
+            # targets = parse_element(elements[1])
+            sources = []
+            targets = []
+
+            for arc in i.in_arcs:
+                label = arc.source.label if arc.source.label else "tau"
+                sources.append(label)
+
+            for arc in i.out_arcs:
+                label = arc.target.label if arc.target.label else "tau"
+                targets.append(label)
+
+            print(sources)
+            print(targets)
 
             place = ' '.join(sources) + ' ---> ' + ' '.join(targets)
             net_places.add(place)
@@ -266,7 +295,7 @@ def find_actual_places(net):
     ep = list(end_places)
     ep.sort()
 
-    start_place = '< ---> ' + ' '.join(sp)
+    start_place = '> ---> ' + ' '.join(sp)
     end_place = ' '.join(ep) + ' ---> |'
 
     net_places.add(start_place)
@@ -279,7 +308,7 @@ def build_net_from_places(unique_activities, places):
     net = PetriNet()
     transitions = {}
     for activity in unique_activities:
-        label = None if activity == '<' or activity == '|' else activity
+        label = None if activity == '>' or activity == '|' else activity
         t = PetriNet.Transition(activity, label)
         transitions[activity] = t
         net.transitions.add(t)
@@ -306,7 +335,7 @@ def build_net_from_places(unique_activities, places):
     net.places.add(source)
     net.places.add(sink)
 
-    petri_utils.add_arc_from_to(source, transitions['<'], net)
+    petri_utils.add_arc_from_to(source, transitions['>'], net)
     petri_utils.add_arc_from_to(transitions['|'], sink, net)
     
     im = Marking()
@@ -327,7 +356,7 @@ def back_to_petri(edge_index, nodes, mask):
         pn_dict[i] = place
         pn.places.add(place)
       else:
-        if nodes[i] == '<' or nodes[i] == '|' or "silent" in nodes[i]:
+        if nodes[i] == '>' or nodes[i] == '|' or "silent" in nodes[i]:
             name = None
         else:
             name = nodes[i]
@@ -345,7 +374,7 @@ def back_to_petri(edge_index, nodes, mask):
   im = Marking()
   source = PetriNet.Place("source")
   pn.places.add(source)
-  petri_utils.add_arc_from_to(source, pn_dict[nodes.index('<')], pn)
+  petri_utils.add_arc_from_to(source, pn_dict[nodes.index('>')], pn)
   im[source] = 1
 
   fm = Marking()

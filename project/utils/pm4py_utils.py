@@ -112,7 +112,7 @@ def get_variants_parsed(log, top=None):
     variants = list()
     for variant_log in variants_log:
         vl = list(variant_log)
-        vl = ['<'] + vl + ['|']
+        vl = ['>'] + vl + ['|']
         variants.append(vl)
 
     return variants
@@ -126,10 +126,21 @@ def get_variants_distribution_parsed(log):
     variants = []
     for variant in variants_count:
         v = variant['variant'].split(',')
-        v.insert(0, '<')
+        v.insert(0, '>')
         v.append('|')
         c = variant['count']
         d = {'variant': v, 'count': c/total}
         variants.append(d)
 
     return variants
+
+
+
+def filter_log_perc(log, min_perc=0.2):
+    filtered_log = pm4py.filter_variants_by_coverage_percentage(log, min_perc)
+    return filtered_log
+
+
+def filter_log_top_k(log, k=30):
+    filtered_log = pm4py.filter_variants_top_k(log, k)
+    return filtered_log
