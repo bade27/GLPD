@@ -38,15 +38,13 @@ def rename_files(current_dir, name, extension):
     idx += 1
 
 
-def split_move_files(old_pos, new_pos, train, valid, test, file_names=None):
+def split_move_files(old_pos, new_pos, train, test, file_names=None):
   files = os.listdir(old_pos) if file_names is None else file_names
   for idx, file in enumerate(sorted(files)):
     if idx in train:
       shutil.move(os.path.join(old_pos, file), new_pos[0])
-    elif idx in valid:
-      shutil.move(os.path.join(old_pos, file), new_pos[1])
     elif idx in test:
-      shutil.move(os.path.join(old_pos, file), new_pos[2])
+      shutil.move(os.path.join(old_pos, file), new_pos[1])
 
 
 def copy_dir(src, dst):

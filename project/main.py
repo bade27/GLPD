@@ -65,6 +65,9 @@ if __name__ == '__main__':
         dataset.clean_dataset_and_split()
 
         copy_dir(base_dir, copy_after_split)
+    else:
+        dataset = Dataset(base_dir)
+        dataset.parse_real_dataset()
 
 
     trainer = Trainer(model_type, base_dir, optimizer, lr, gnn_type, torch.nn.NLLLoss())

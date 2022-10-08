@@ -29,7 +29,7 @@ def build_arcs_dataframe(df):
 
 
 def build_temp_graph(dataframe):
-	activities = dataframe["source"].unique()
+	activities = set(dataframe["source"].unique()).union({'|'})
 	temporal_graph = {}
 	for activity in activities:
 		df = dataframe[(dataframe["source"] == activity) | (dataframe["destination"] == activity)]
@@ -52,7 +52,7 @@ def node_temporal_feature(node, temporal_graph, time, window):
 			df = valid_rows.copy()
 			df = df[df["activity"] == un]
 			df["time"] = df["time"] - valid_rows["time"].min()
-			s = np.zeros((window+1),int)
+			s = np.zeros((window+1),float)
 			for value in df["time"]:
 				s[value] = 1
 			signature.append(s)
@@ -63,7 +63,7 @@ def node_temporal_feature(node, temporal_graph, time, window):
 				features = np.concatenate((features, signature[i]), axis=0)
 		if features is not None:
 			return features
-	return np.zeros((window+1),int)
+	return np.zeros((window+1),float)
 
 
 def get_feature_given_window(dataframe, tg, window):
@@ -91,6 +91,50 @@ def generate_features(dataframe, tg, n):
 	for i in range(1, n+1):
 		df = get_feature_given_window(df, tg, i)
 	return df
+
+
+def temporal_embedding(dataframe, temporal_graph, encoding, window):
+	activities = set(dataframe["source"].unique()).union({'|'})
+	embeddings = {}
+
+	df = dataframe.copy()
+	for time, row in df.iterrows():
+		activity = row["source"]
+		if activity not in embeddings:
+			embeddings[activity] = []
+		tg = temporal_graph[activity]
+		temporal_neighbors = tg[(tg["time"] > time-window) & (tg["time"] <= time)].copy()
+		min_time = temporal_neighbors["time"].min()
+		temporal_neighbors["time"] = temporal_neighbors["time"].apply(lambda x : x-min_time)
+		embedding = np.zeros((window), float)
+		for _, row in temporal_neighbors.iterrows():
+			embedding[row["time"]] = encoding[row["activity"]]
+		embeddings[activity].append(embedding)
+
+	end_df = dataframe.copy()
+	end_df = end_df[end_df["destination"]=='|']
+	embeddings['|'] = []
+	for time, row in end_df.iterrows():
+		tg = temporal_graph[activity]
+		temporal_neighbors = tg[(tg["time"] > time-window) & (tg["time"] <= time)].copy()
+		min_time = temporal_neighbors["time"].min()
+		temporal_neighbors["time"] = temporal_neighbors["time"].apply(lambda x : x-min_time)
+		embedding = np.zeros((window), float)
+		for _, row in temporal_neighbors.iterrows():
+			embedding[row["time"]] = encoding[row["activity"]]
+		embeddings['|'].append(embedding)
+	
+	features = {}
+	for activity in activities:
+		if activity not in features:
+			features[activity] = np.zeros((window), float)
+		for embedding in embeddings[activity]:
+			features[activity] += embedding
+		assert len(features[activity]) == window
+	
+	return features
+
+	
 
 
 def build_graph(unique_activities, places, encoding):
@@ -246,6 +290,15 @@ def mean_node_degree(nodes, edge_index):
         degrees.append(degree)
 
     return np.mean(degrees)
+
+
+def std_node_degree(nodes, edge_index):
+	node_degrees = [node_degree(node, edge_index) for node in nodes]
+	mean_degree = mean_node_degree(nodes, edge_index)
+	std = 0
+	if mean_degree is not None:
+		std = sum([(degree-mean_degree)**2 for degree in node_degrees])/len(node_degrees)
+	return std
 
 
 def add_silent_transitions(edge_index, mask, nodes, ar):
