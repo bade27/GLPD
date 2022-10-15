@@ -26,7 +26,7 @@ class SelfSupPredictor(torch.nn.Module):
 			return self.inference(x, edge_index, original, nodes, variants)
 
 	def forward_training(self, x, edge_index, original, nodes, variants):
-		embeddings = self.first_encoder(x, edge_index)
+		embeddings = self.first_encoder(x.float(), edge_index)
 		final_places_info = self.aggregator(embeddings, variants, nodes, original, edge_index)
 		
 		places = set()
@@ -51,9 +51,9 @@ class SelfSupPredictor(torch.nn.Module):
 			return places
 
 
-	def get_activity_order(edge_index, nodes):
+	def get_activity_order(self, edge_index, nodes):
 		order = []
-		queue = min(edge_index)
+		queue = [torch.min(edge_index).item()]
 		visited = set()
 
 		while queue:

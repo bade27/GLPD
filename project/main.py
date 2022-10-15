@@ -18,7 +18,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--generate_data", action="store_true")
 parser.add_argument("--train", action="store_true")
 parser.add_argument("--test", action="store_true")
-parser.add_argument("--model_type", type=str, default="selfsupervised")
 parser.add_argument("--optimizer", type=str, default="ADAM")
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--gnn_type", type=str, default="gcn")
@@ -43,7 +42,7 @@ if __name__ == '__main__':
         copy_after_split = os.path.join(base_dir, '..', "data_after_split")
 
         # generate data
-        dataset = Dataset(base_dir, random_features=True)
+        dataset = Dataset(data_dir=base_dir, synth=True, type_of_features="temporal")
         dataset.set_statistics(
             stats.mode, 
             stats.min, 
@@ -67,10 +66,9 @@ if __name__ == '__main__':
         copy_dir(base_dir, copy_after_split)
     else:
         dataset = Dataset(base_dir)
-        dataset.parse_real_dataset()
 
 
-    trainer = Trainer(model_type, base_dir, optimizer, lr, gnn_type, torch.nn.NLLLoss())
+    trainer = Trainer(base_dir, optimizer, lr, gnn_type)
 
     
     if do_train:

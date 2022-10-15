@@ -161,7 +161,7 @@ def build_graph(unique_activities, places, encoding):
 			if e != "":
 				head.append(e)
 
-		pname = f"p{idx}"
+		pname = f"place_{idx}"
 		if pname not in place_in:
 			place_in[pname] = set()
 		if pname not in place_out:
@@ -297,7 +297,8 @@ def std_node_degree(nodes, edge_index):
 	mean_degree = mean_node_degree(nodes, edge_index)
 	std = 0
 	if mean_degree is not None:
-		std = sum([(degree-mean_degree)**2 for degree in node_degrees])/len(node_degrees)
+		ss = [(degree-mean_degree)**2 for degree in node_degrees]
+		std = sum(ss)/len(node_degrees)
 	return std
 
 

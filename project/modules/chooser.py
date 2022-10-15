@@ -74,7 +74,7 @@ class Chooser(torch.nn.Module):
 				# print((probability-self.epsilon) / torch.sum(probabilities))
 				self.probabilities.append(
 					torch.log(
-						(probability-self.epsilon) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
+						(probability+self.epsilon) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
 						).unsqueeze(-1)
 					)
 		return chosen_places

@@ -12,9 +12,9 @@ from utils.general_utils import load_pickle
 
 
 class MetaDataset(Dataset):
-  def __init__(self, base_dir, random_features=False):
+  def __init__(self, base_dir, type_of_features="temporal"):
     self.base_dir = base_dir
-    self.random_features = random_features
+    self.type_of_features = type_of_features
     self.nodes_dir = os.path.join(self.base_dir, 'nodes')
     self.variant_dir = os.path.join(self.base_dir, 'variants')
     self.graph_dir = os.path.join(self.base_dir, 'raw')
@@ -23,7 +23,7 @@ class MetaDataset(Dataset):
     self.variants_name = sorted(os.listdir(self.variant_dir))
     self.index_names = sorted([f for f in os.listdir(self.graph_dir) if 'graph' in f])
     self.original_names = sorted([f for f in os.listdir(self.graph_dir) if 'original' in f])
-    if random_features:
+    if self.type_of_features == "temporal" or self.type_of_features== "random":
       self.x_names = sorted([f for f in os.listdir(self.graph_dir) if 'x' in f])
     else:
       self.x_names = [f for f in os.listdir(os.path.join(self.graph_dir, "features"))]
@@ -48,7 +48,7 @@ class MetaDataset(Dataset):
     original = torch.load(original_f)
     nodes = load_pickle(nodes_f)
     variants = load_pickle(variants_f)
-    if self.random_features:
+    if self.type_of_features == "temporal" or self.type_of_features== "random":
       x = torch.load(x_f)
     else:
       x = torch.load(x_f)

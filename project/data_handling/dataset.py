@@ -47,7 +47,12 @@ class Dataset():
 
 		self.type_of_features = type_of_features
 
-		self.dirs = []
+		self.dirs = [
+			self.data_dir, self.graphs_dir, 
+			self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
+			self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
+			self.input_dir, self.input_dir_imgs, self.input_dir_pnml
+		]
 
 		if self.synth:
 			self.original_dir = os.path.join(self.saved_dir, "original_nets")
@@ -60,28 +65,18 @@ class Dataset():
 
 
 			self.dirs += [
-				self.data_dir, self.graphs_dir, 
-				self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
-				self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
-				self.input_dir, self.input_dir_imgs, self.input_dir_pnml,
 				self.original_dir, self.original_dir_imgs, self.original_dir_pnml
 				# self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml
 				]
 		
 		else:
-			self.log = load_log_xes(os.path.join(self.data_dir, filename))
-			self.dirs += [
-				self.data_dir, self.graphs_dir, 
-				self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
-				self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
-				self.input_dir, self.input_dir_imgs, self.input_dir_pnml,
-				# self.reconstr_dir, self.reconstr_dir_imgs, self.reconstr_dir_pnml
-				]
+			log_filename = os.path.join(self.data_dir, filename)
+			print(log_filename)
+			self.log = load_log_xes(log_filename)
 
 		create_dirs(self.dirs)
 		self.columns = ["source", "destination", "timestamp", "case", "log", "state_label"]
 
-		self.statistics = None
 		self.set_statistics()
 
 
@@ -96,7 +91,7 @@ class Dataset():
 			unique_activities = set()
 			for trace in self.log:
 				for activity in trace:
-					unique_activities.add(activity["concept:name"])
+					unique_activities.add(activity["concept:name"].replace(" ", "_"))
 			count = 1
 			for unique in unique_activities:
 				encoding[unique] = count
@@ -175,8 +170,8 @@ class Dataset():
 					net_ws, im_ws, fm_ws = pm4py.convert_to_petri_net(tree)
 
 					net, im, fm = reduce_silent_transitions(net_ws, im_ws, fm_ws)
-					log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
-
+					log = pm4py.play_out(
+                        net, im, fm, parameters={"no_traces":no_traces})
 					# net, im, fm = pm4py.discover_petri_net_alpha(log)
 					# if not is_sound(net, im, fm):
 					#     continue
@@ -188,7 +183,7 @@ class Dataset():
 
 				for trace in log:
 					for activity in trace:
-						unique_activities.add(activity["concept:name"])
+						unique_activities.add(activity["concept:name"].replace(" ", "_"))
 			
 				df = log_to_dataframe(log)
 		

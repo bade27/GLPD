@@ -15,6 +15,7 @@ import model.structure as st
 from model.graph_dataset import MetaDataset
 from model.self_supervised import SelfSupPredictor
 import random
+import matplotlib.pyplot as plt
 from model.supervised import SupervisedPredictor
 from utils.general_utils import create_dirs
 from utils.general_utils import load_pickle
@@ -28,20 +29,14 @@ optimizer = {"ADAM":torch.optim.Adam, "SGD":torch.optim.SGD}
 
 
 class Trainer():
-	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None, random_features=True):
+	def __init__(self, base_dir, optimizer_name, lr, gnn_type, type_of_features="temporal"):
 		self.optimizer_name = optimizer_name
 		self.lr = lr
 		self.gnn_type = gnn_type
-		self.model_type = model_type
 		self.base_dir = base_dir
-		self.model = None
-		self.device = None
-		self.optimizer = None
-		self.criterion = criterion
 
-		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), random_features=random_features)
-		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"), random_features=random_features)
-		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), random_features=random_features)
+		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), type_of_features=type_of_features)
+		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), type_of_features=type_of_features)
 
 		random.seed(1234)
 
@@ -53,15 +48,11 @@ class Trainer():
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.device = 'cpu'
+		# self.device = 'cpu'
 
 		
-		if self.model_type == "supervised":
-			output_size = st.output_size_sup
-			self.model = SupervisedPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
-		else:
-			output_size = st.output_size_self_sup
-			self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
+		output_size = st.output_size_self_sup
+		self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 			
 		self.model = self.model.to(self.device)
 		self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
@@ -74,24 +65,20 @@ class Trainer():
 		return self.model
 		
 		
-	def train(self, epochs, patience, max_runs=1):	
-		if self.model_type == 'supervised':
-			self.train_supervised(epochs, patience) 
-		else:
-			self.train_self_supervised(epochs, patience, max_runs)    
-			
-			
-	def train_self_supervised(self, epochs, patience, max_runs):
+	def train(self, epochs, patience, max_runs, theta=1e-3):
 		best_loss = float('+inf')
 		best_epoch = 0
+		no_epochs = 0
 		no_epochs_no_improv = 0
 
 		epoch_loss = []
+		mean_numer_of_runs = []
 		
 		for epoch in range(epochs):
-			elements = [i for i in range(len(self.train_dataset))]
+			elements = [i for i in range(len(self.train_dataset))][:1000]
 			
 			sum_loss = 0
+			no_epoch_runs = []
 			
 			random.shuffle(elements)
 			for i in tqdm(elements):
@@ -100,29 +87,28 @@ class Trainer():
 				edge_index = edge_index.to(self.device)
 				
 				cumulative_loss = []
+				no_runs = 0
 				prev_prob = 0
 				
-				while True:
+				for run in tqdm(range(max_runs)):
 					self.model.train()
 					self.optimizer.zero_grad()
 					score = self.model(x, edge_index, original, nodes, variants)
-					# print(score)
-					# print('*'*50)
 					loss = score
 					loss.backward()
 					self.optimizer.step()
 
 					cumulative_loss.append(score.item())
-
-					if abs(score - prev_prob) < 1e-4:
+					no_runs += 1
+					if abs(score - prev_prob) < theta and run > 0:
 						break
-					
-					max_runs -= 1
-					if max_runs < 0:
-						break
+					prev_prob = loss.item()
 
 				sum_loss += np.mean(cumulative_loss)
 			
+				no_epoch_runs.append(no_runs)
+
+			mean_numer_of_runs.append(np.mean(no_epoch_runs))
 			epoch_loss.append(sum_loss)
 
 			print(f"epoch {epoch+1} - loss: {sum_loss}")
@@ -147,88 +133,13 @@ class Trainer():
 			os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt"), 
 			os.path.join(self.best_model_dir, f"self_supervised_{best_epoch}.pt"))
 		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
-
-
-	def train_supervised(self, epochs, patience):
-		max_accuracy = 0
-		best_epoch = 0
-		no_epochs_no_improv = 0
-
-		mean_loss = []
-		mean_acc = []
 		
-		for epoch in range(epochs):
-			epoch_loss = []
+		plt.plot([i for i in range(no_epochs)], epoch_loss)
+		plt.ylabel("Loss")
+		plt.xlabel("Epochs")
+		plt.savefig(os.path.join(self.best_model_dir, "loss.png"))
 
-			elements = [i for i in range(len(self.train_dataset))]
-			random.shuffle(elements)
-			
-			for i in tqdm(elements):
-				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
-				x = x.to(self.device)
-				y = y.to(self.device)
-				edge_index = edge_index.to(self.device)
-				
-				self.model.train()
-				self.optimizer.zero_grad()
-				prediction = self.model(x, edge_index, original, y, nodes, variants)
-				loss = self.criterion(prediction, y)
-				loss.backward()
-				self.optimizer.step()
 
-				epoch_loss.append(loss.item())
-				
-			accuracy = self.validate()
-
-			mean_loss.append(np.mean(epoch_loss))
-			mean_acc.append(accuracy)
-			print(f"epoch {epoch+1} - loss: {mean_loss[-1]} - acc: {mean_acc[-1]}")
-
-			no_epochs = epoch
-			
-			if accuracy > max_accuracy:
-				no_epochs_no_improv = 0
-				best_epoch = epoch
-				max_accuracy = accuracy
-			else:
-				no_epochs_no_improv += 1
-				
-			if epoch > patience and no_epochs_no_improv == patience:
-				break
-			else:
-				torch.save(self.model.state_dict(), os.path.join(self.checkpoints_dir, f"supervised_{epoch}.pt"))
-				
-		print(f"total epochs passed {no_epochs}")
-		print(f"best poch: {best_epoch}")
-		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"supervised_{best_epoch}.pt")))
-
-  
-	def validate(self):
-		self.model.eval()
-
-		accuracies = []
-
-		for i in tqdm(range(len(self.valid_dataset))):
-			x, edge_index, original, y, nodes, variants = self.valid_dataset[i]
-
-			x = x.to(self.device)
-			y = y.to(self.device)
-			edge_index = edge_index.to(self.device)
-
-			mask = self.model(x, edge_index, original, y, nodes, variants)
-
-			result = [int(v) for v in mask]
-
-			# assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
-
-			print(result)
-
-			accuracy = sum(result[nodes.index('|')+1:]) / (len(result)-nodes.index('|')+1)
-			accuracies.append(accuracy)
-
-		return np.mean(accuracies)
-
-	
 	def test(self, silent_transitions=False):
 		if len(os.listdir(self.best_model_dir)) > 0:
 			file = os.listdir(self.best_model_dir)[0]
@@ -295,7 +206,7 @@ class Trainer():
 
 			net, im, fm = back_to_petri(new_edge_index, new_nodes, mask)
 			sound_nets += int(is_sound(net, im, fm))
-			name = self.model_type + '_' + str(idxes[i])
+			name = "model_" + str(idxes[i])
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
 			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))

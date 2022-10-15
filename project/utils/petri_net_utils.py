@@ -351,7 +351,7 @@ def back_to_petri(edge_index, nodes, mask):
   pn_dict = {}
   for i in range(len(nodes)):
     if mask[i]:
-      if "p" in nodes[i]:
+      if "place" in nodes[i]:
         place = PetriNet.Place(nodes[i])
         pn_dict[i] = place
         pn.places.add(place)
