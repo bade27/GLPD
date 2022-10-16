@@ -35,9 +35,17 @@ class Trainer():
 		self.gnn_type = gnn_type
 		self.base_dir = base_dir
 
-		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), type_of_features=type_of_features)
-		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), type_of_features=type_of_features)
+		self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+		print(f"device: {self.device}")
+		print("loading datasets...")
+		self.train_dataset = MetaDataset(
+			os.path.join(self.base_dir, "train_graphs"), device=self.device, type_of_features=type_of_features)
+		print("train dataset loaded")
+		self.test_dataset = MetaDataset(
+			os.path.join(self.base_dir, "test_graphs"), device=self.device, type_of_features=type_of_features)
+		print("test dataset loaded")
+		
 		random.seed(1234)
 
 		self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
@@ -46,11 +54,7 @@ class Trainer():
 		create_dirs([self.checkpoints_dir, self.best_model_dir, self.inference_dir])
 
 		num_node_features, features_size = st.num_node_features, st.features_size
-		
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		# self.device = 'cpu'
-
-		
+			
 		output_size = st.output_size_self_sup
 		self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 			
@@ -83,8 +87,6 @@ class Trainer():
 			random.shuffle(elements)
 			for i in tqdm(elements):
 				x, edge_index, original, nodes, variants = self.train_dataset[i]
-				x = x.to(self.device)
-				edge_index = edge_index.to(self.device)
 				
 				cumulative_loss = []
 				no_runs = 0
@@ -163,9 +165,6 @@ class Trainer():
 
 		for i in tqdm(range(len(self.test_dataset))):
 			x, edge_index, original, nodes, variants = self.test_dataset[i]
-
-			x = x.to(self.device)
-			edge_index = edge_index.to(self.device)
 
 			places = self.model(x, edge_index, original, nodes, variants)
 

@@ -59,13 +59,12 @@ class InfoAggregator(torch.nn.Module):
 					
                     embeddings_cat = torch.cat((place_f, src_f, dst_f),1)
 
-                    places_info[place] += embeddings_cat.squeeze()
+                    places_info[place] += embeddings_cat.squeeze() + prev_embedding_summary
 					
-                    prev_embedding_summary += places_info[place]
                     considered_places.add(place)
 					
-                if len(considered_places) > 0:
-                    places_info[list(considered_places)] += prev_embedding_summary
+                for cp in considered_places:
+                    prev_embedding_summary += places_info[cp]
 							
                 embeddings = self.encoder(embeddings, edge_index)
 					
