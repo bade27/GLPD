@@ -37,7 +37,7 @@ def build_temp_graph(dataframe):
 		for index, row in df.iterrows():
 			neighbor = row["source"] if row["source"] != activity else row["destination"]
 			temporal_neighborhood.append([index, neighbor])
-		temporal_graph[activity] = pd.DataFrame(temporal_neighborhood, columns=["time", "activity"])    
+		temporal_graph[activity] = pd.DataFrame(temporal_neighborhood, columns=["time", "activity"])
 	return temporal_graph
 
 
@@ -123,7 +123,7 @@ def temporal_embedding(dataframe, temporal_graph, encoding, window):
 		for _, row in temporal_neighbors.iterrows():
 			embedding[row["time"]] = encoding[row["activity"]]
 		embeddings['|'].append(embedding)
-	
+
 	features = {}
 	for activity in activities:
 		if activity not in features:
@@ -131,10 +131,10 @@ def temporal_embedding(dataframe, temporal_graph, encoding, window):
 		for embedding in embeddings[activity]:
 			features[activity] += embedding
 		assert len(features[activity]) == window
-	
+
 	return features
 
-	
+
 
 
 def build_graph(unique_activities, places, encoding):
@@ -217,7 +217,7 @@ def get_forward_star(edge_index, node_idx):
 def is_graph_connected(edge_index, mask):
 	if edge_index is None:
 		return False
-		
+
 	neighbors = {}
 	limit = torch.max(edge_index).item()
 	for i in range(limit+1):
@@ -243,7 +243,7 @@ def is_graph_connected(edge_index, mask):
 			for child in children:
 				queue.insert(0, child)
 		visited.add(node)
-			
+
 	return len(visited) == len(neighbors)
 
 
@@ -257,7 +257,7 @@ def get_next_activities(edge_index, idx, mask=None):
 			filter.append(mask[src] and mask[dst])
 
 		edge_index = edge_index[:, filter]
-	
+
 	next_places, _ = get_forward_star(edge_index, idx)
 	for place in next_places:
 		activities, _ = get_forward_star(edge_index, place)
@@ -275,21 +275,21 @@ def check_activity_connection(edge_index, connections, mask):
 
 
 def node_degree(node, edge_index):
-    _, in_deg = get_backward_star(edge_index, node)
-    _, out_deg = get_forward_star(edge_index, node)
-    return in_deg + out_deg
+	_, in_deg = get_backward_star(edge_index, node)
+	_, out_deg = get_forward_star(edge_index, node)
+	return in_deg + out_deg
 
 
 def mean_node_degree(nodes, edge_index):
-    degrees = []
-    for node in nodes:
-        degree = node_degree(node, edge_index)
-        if degree == 0:
-            return None
+	degrees = []
+	for node in nodes:
+		degree = node_degree(node, edge_index)
+		if degree == 0:
+			return None
 
-        degrees.append(degree)
+		degrees.append(degree)
 
-    return np.mean(degrees)
+	return np.mean(degrees)
 
 
 def std_node_degree(nodes, edge_index):
@@ -320,7 +320,7 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 					if mask[np]:
 						following_places[place].add(np)
 						candidate_positions.add((place, np))
-	
+
 	no_silent = 0
 	new_idx = torch.max(edge_index) + 1
 	new_nodes = []
@@ -352,5 +352,40 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 		edge_index = torch.cat((edge_index, new_edge_index), dim=1)
 
 		nodes = nodes + new_nodes
-	
+
 	return edge_index, nodes
+
+
+def get_activity_order(edge_index, nodes):
+	order = []
+	queue = [torch.min(edge_index).item()]
+	visited = set()
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			order.append(current)
+			for i in range(len(edge_index[0])):
+				if edge_index[0][i].item() == current:
+					queue.append(edge_index[1][i].item())
+			visited.add(current)
+
+	return [i for i in order if i <= nodes.index('|')]
+	
+
+def get_next_node(edge_index, nodes):
+	queue = [torch.min(edge_index).item()]
+	visited = set()
+
+	followers = {node:set() for node in nodes}
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			for i in range(len(edge_index[0])):
+				if edge_index[0][i].item() == current:
+					queue.append(edge_index[1][i].item())
+					followers[nodes[current]].add(nodes[edge_index[1][i].item()])
+			visited.add(current)
+
+	return followers

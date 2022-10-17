@@ -17,27 +17,29 @@ class SelfSupPredictor(torch.nn.Module):
 		self.aggregator = InfoAggregator(embedding_size, device, kind=encoder)
 		self.chooser = Chooser(embedding_size*3, output_size)
 
-	def forward(self, x, edge_index, original, nodes, variants):
+	def forward(self, x, edge_index, original, nodes, variants, order, nextt):
 		self.chooser.ready_for_training(nodes)
 		if self.training:
-			_ = self.forward_training(x, edge_index, original, nodes, variants)
+			_ = self.forward_training(x, edge_index, original, nodes, variants, order, nextt)
 			return -self.chooser.get_score() # / len(self.chooser.probabilities)
 		else:
-			return self.inference(x, edge_index, original, nodes, variants)
+			return self.inference(x, edge_index, original, nodes, variants, order, nextt)
 
-	def forward_training(self, x, edge_index, original, nodes, variants):
+	def forward_training(self, x, edge_index, original, nodes, variants, order, nextt):
 		embeddings = self.first_encoder(x.float(), edge_index)
-		final_places_info = self.aggregator(embeddings, variants, nodes, original, edge_index)
-		
+		final_places_info = self.aggregator(embeddings, variants, nodes, original, edge_index, order, nextt)
+		# print(final_places_info)
+		# final_places_info = torch.nn.functional.normalize(final_places_info, p=2.0, dim = 1)
+
 		places = set()
 		# activities = [i for i in range(nodes.index('|')+1)]
-		activities = self.get_activity_order(original, nodes)
+		# activities = self.get_activity_order(original, nodes)
 
-		check_found_activities = set(activities)
+		check_found_activities = set(order)
 		actual_activities = set([i for i in range(nodes.index('|')+1)])
 		assert check_found_activities == actual_activities
 
-		for activity in activities:
+		for activity in order:
 			chosen_places = self.chooser(final_places_info, activity, original)
 			for chosen_place in chosen_places:
 				places.add(chosen_place)
@@ -45,24 +47,7 @@ class SelfSupPredictor(torch.nn.Module):
 		return places
 			
 
-	def inference(self, x, edge_index, original, nodes, variants):
+	def inference(self, x, edge_index, original, nodes, variants, order, nextt):
 		with torch.no_grad():
-			places = self.forward_training(x, edge_index, original, nodes, variants)
+			places = self.forward_training(x, edge_index, original, nodes, variants, order, nextt)
 			return places
-
-
-	def get_activity_order(self, edge_index, nodes):
-		order = []
-		queue = [torch.min(edge_index).item()]
-		visited = set()
-
-		while queue:
-			current = queue.pop(0)
-			if current not in visited:
-				order.append(current)
-				for i in range(len(edge_index[0])):
-					if edge_index[0][i].item() == current:
-						queue.append(edge_index[1][i].item())
-				visited.add(current)
-		
-		return [i for i in order if i <= nodes.index('|')]

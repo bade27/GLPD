@@ -19,5 +19,6 @@ class DecoderMLP(torch.nn.Module):
     output = self.relu(output)
     output = self.dropout(output)
     output = self.dense3(output)
+    output = self.relu(output)
         
     return output

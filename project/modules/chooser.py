@@ -5,7 +5,7 @@ from utils.graph_utils import get_forward_star, get_next_activities
 
 
 class Chooser(torch.nn.Module):
-	def __init__(self, input_size, output_size, epsilon=1e-9):
+	def __init__(self, input_size, output_size, epsilon=1e-5):
 		super(Chooser, self).__init__()
 		self.decoder = DecoderMLP(input_size, output_size)
 		self.sigmoid = torch.nn.Sigmoid()
@@ -17,6 +17,8 @@ class Chooser(torch.nn.Module):
 
 
 	def get_score(self):
+		if len(self.probabilities) == 0:
+			return 0
 		return torch.concat(self.probabilities, dim=0).sum()
 
 	
@@ -68,13 +70,16 @@ class Chooser(torch.nn.Module):
 
 		if len(chosen_places) > 0:
 			probabilities = self.sigmoid(scores)[[pool_of_places.index(place) for place in chosen_places]]
+			# print(scores)
+			# print(probabilities)
+			# print("-"*100)
 			for probability in probabilities:
 				# print("prob ", probability-self.epsilon)
 				# print("sum ", torch.sum(probabilities))
 				# print((probability-self.epsilon) / torch.sum(probabilities))
 				self.probabilities.append(
 					torch.log(
-						(probability+self.epsilon) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
+						(probability) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
 						).unsqueeze(-1)
 					)
 		return chosen_places

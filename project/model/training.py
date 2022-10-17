@@ -2,6 +2,8 @@ from pathlib import Path
 import shutil
 import sys
 
+from scipy.stats import moment
+
 
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
@@ -36,6 +38,7 @@ class Trainer():
 		self.base_dir = base_dir
 
 		self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+		self.device = "cpu"
 
 		print(f"device: {self.device}")
 		print("loading datasets...")
@@ -59,7 +62,8 @@ class Trainer():
 		self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 			
 		self.model = self.model.to(self.device)
-		self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
+		# self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
+		self.optimizer = optimizer["SGD"](self.model.parameters(), 1e-3, momentum=0.7)
 
 		
 	def set_model(self, model):
@@ -79,14 +83,14 @@ class Trainer():
 		mean_numer_of_runs = []
 		
 		for epoch in range(epochs):
-			elements = [i for i in range(len(self.train_dataset))][:1000]
+			elements = [i for i in range(len(self.train_dataset))]
 			
 			sum_loss = 0
 			no_epoch_runs = []
 			
 			random.shuffle(elements)
 			for i in tqdm(elements):
-				x, edge_index, original, nodes, variants = self.train_dataset[i]
+				x, edge_index, original, nodes, variants, order, nextt = self.train_dataset[i]
 				
 				cumulative_loss = []
 				no_runs = 0
@@ -95,11 +99,10 @@ class Trainer():
 				for run in tqdm(range(max_runs)):
 					self.model.train()
 					self.optimizer.zero_grad()
-					score = self.model(x, edge_index, original, nodes, variants)
+					score = self.model(x, edge_index, original, nodes, variants, order, nextt)
 					loss = score
 					loss.backward()
 					self.optimizer.step()
-
 					cumulative_loss.append(score.item())
 					no_runs += 1
 					if abs(score - prev_prob) < theta and run > 0:
@@ -129,14 +132,14 @@ class Trainer():
 			else:
 				torch.save(self.model.state_dict(), os.path.join(self.checkpoints_dir, f"self_supervised_{epoch}.pt"))
 				
-		print(f"total epochs passed {no_epochs}")
-		print(f"best poch: {best_epoch}")
+		print(f"total epochs passed {no_epochs+1}")
+		print(f"best poch: {best_epoch+1}")
 		shutil.copy(
 			os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt"), 
 			os.path.join(self.best_model_dir, f"self_supervised_{best_epoch}.pt"))
 		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
 		
-		plt.plot([i for i in range(no_epochs)], epoch_loss)
+		plt.plot([i for i in range(no_epochs+1)], epoch_loss)
 		plt.ylabel("Loss")
 		plt.xlabel("Epochs")
 		plt.savefig(os.path.join(self.best_model_dir, "loss.png"))
@@ -164,7 +167,7 @@ class Trainer():
 		connected = 0
 
 		for i in tqdm(range(len(self.test_dataset))):
-			x, edge_index, original, nodes, variants = self.test_dataset[i]
+			x, edge_index, original, nodes, variants, order, nextt = self.test_dataset[i]
 
 			places = self.model(x, edge_index, original, nodes, variants)
 

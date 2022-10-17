@@ -21,6 +21,8 @@ class MetaDataset(Dataset):
     self.nodes_dir = os.path.join(self.base_dir, 'nodes')
     self.variant_dir = os.path.join(self.base_dir, 'variants')
     self.graph_dir = os.path.join(self.base_dir, 'raw')
+    self.order_dir = os.path.join(self.base_dir, 'order')
+    self.next_dir = os.path.join(self.base_dir, 'next')
 
     # list of names
     self.nodes_names = sorted(os.listdir(self.nodes_dir))
@@ -32,6 +34,8 @@ class MetaDataset(Dataset):
     else:
       self.x_names = [f for f in os.listdir(os.path.join(self.graph_dir, "features"))]
       self.features_size = torch.load(os.path.join(self.graph_dir, "features", self.x_names[0])).shape[1]
+    self.order_names = sorted(os.listdir(self.order_dir))
+    self.next_names = sorted(os.listdir(self.next_dir))
 
     # data
     self.edge_indices_list = []
@@ -70,6 +74,17 @@ class MetaDataset(Dataset):
         x = x[indices,:]
       self.xs_list.append(x)
 
+    self.order_list = []
+    for order_name in self.order_names:
+      order_f = os.path.join(self.order_dir, order_name)
+      order = load_pickle(order_f)
+      self.order_list.append(order)
+
+    self.next_list = []
+    for next_name in self.next_names:
+      next_f = os.path.join(self.next_dir, next_name)
+      nextt = load_pickle(next_f)
+      self.next_list.append(nextt)
   
 
   def __len__(self):
@@ -77,6 +92,8 @@ class MetaDataset(Dataset):
     assert len(self.index_names) == len(self.x_names)
     assert len(self.index_names) == len(self.nodes_names)
     assert len(self.nodes_names) == len(self.variants_names)
+    assert len(self.nodes_names) == len(self.order_names)
+    assert len(self.order_names) == len(self.next_names)
 
     return len(self.index_names)
 
@@ -86,5 +103,7 @@ class MetaDataset(Dataset):
     original = self.originals_list[idx].to(self.device)
     nodes = self.nodes_list[idx]
     variants = self.variants_list[idx]
+    order = self.order_list[idx]
+    nextt = self.next_list[idx]
 
-    return x, edge_index, original, nodes, variants
+    return x, edge_index, original, nodes, variants, order, nextt
