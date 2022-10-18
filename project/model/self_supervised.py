@@ -40,7 +40,7 @@ class SelfSupPredictor(torch.nn.Module):
 		assert check_found_activities == actual_activities
 
 		for activity in order:
-			chosen_places = self.chooser(final_places_info, activity, original)
+			chosen_places = self.chooser(final_places_info, activity, original, nodes, nextt)
 			for chosen_place in chosen_places:
 				places.add(chosen_place)
 

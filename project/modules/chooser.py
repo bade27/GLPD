@@ -28,8 +28,12 @@ class Chooser(torch.nn.Module):
 		self.mask = ['p' not in n for n in nodes]
 
 
-	def forward(self, embeddings, activity, original):
-		connections = get_next_activities(original, activity)
+	def forward(self, embeddings, activity, original, nodes, nextt):
+		next_places = nextt[nodes[activity]]
+		to_reach = set()
+		for np in next_places:
+			for na in nextt[np]:
+				to_reach.add(na)
 
 		chosen_places = set()
 
@@ -54,19 +58,23 @@ class Chooser(torch.nn.Module):
 		ranking_map = {pool_of_places[n.item()]:i for i,n in enumerate(ranking)}
 		pool_of_places.sort(key = lambda x: ranking_map[x])
 
-		while True:
-			discovered_next = get_next_activities(original, activity, self.mask)
-			if discovered_next != connections:
-				for position in ranking:
-					place = available_places[position.item()]
-					if not self.mask[place]:
-						self.mask[place] = True
-						chosen_places.add(place)
-						# probability = distribution[position.item()]
-						# self.probabilities.append(probability.unsqueeze(-1))
-						break
-			else:
-				break
+		reached = set()
+
+		while len(to_reach.difference(reached)) > 0:
+			for position in ranking:
+				place = available_places[position.item()]
+				if not self.mask[place]:
+					self.mask[place] = True
+					chosen_places.add(place)
+					# probability = distribution[position.item()]
+					# self.probabilities.append(probability.unsqueeze(-1))
+					break
+			
+			cnext_places = [plc for plc in nextt[nodes[activity]] if self.mask[nodes.index(plc)]]
+			reached = set()
+			for np in cnext_places:
+				for na in nextt[np]:
+					reached.add(na)
 
 		if len(chosen_places) > 0:
 			probabilities = self.sigmoid(scores)[[pool_of_places.index(place) for place in chosen_places]]
