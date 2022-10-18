@@ -17,17 +17,17 @@ class InfoAggregator(torch.nn.Module):
         places_temp_info = {}
         random.shuffle(variants)
 
-        prev_embeddings = embeddings
+        # prev_embeddings = embeddings
 
         for variant in variants:
-            embeddings = prev_embeddings
+            # embeddings = prev_embeddings
             activities = variant
             places_info = torch.zeros(len(nodes), self.cat_embedding_size, device=self.device)
             prev_embedding_summary = 0
 
             in_variant_places_temp_info = {}
 
-            for activity in activities:
+            for ii, activity in enumerate(activities):
                 activity_idx = nodes.index(activity)
                 # all_followers, _ = get_forward_star(original, activity_idx)
 
@@ -45,9 +45,10 @@ class InfoAggregator(torch.nn.Module):
                 #             in_variant_followers[follower].add(next_activity_idx)
 
                 next_places = nextt[activity]
+                selected_next_places = [np for np in next_places if nextt[np] in activities[ii+1:]]
 
-                considered_places = set()
-                for place in next_places:
+                # considered_places = set()
+                for place in selected_next_places:
                     place_idx = nodes.index(place)
                     next_activities = set(nextt[place])
                     next_activities_idx = [nodes.index(act) for act in next_activities]
@@ -77,12 +78,12 @@ class InfoAggregator(torch.nn.Module):
 
                     # places_info[place_idx] += embeddings_cat.squeeze() + prev_embedding_summary
 					
-                    considered_places.add(place_idx)
+                    # considered_places.add(place_idx)
 					
                 # for cp in considered_places:
                 #     prev_embedding_summary += places_info[cp]
 							
-                embeddings = self.encoder(embeddings, edge_index)
+                # embeddings = self.encoder(embeddings, edge_index)
 					
                 # final_places_info += places_info
 

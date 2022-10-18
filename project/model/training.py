@@ -63,7 +63,7 @@ class Trainer():
 			
 		self.model = self.model.to(self.device)
 		# self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
-		self.optimizer = optimizer["SGD"](self.model.parameters(), 1e-3, momentum=0.7)
+		self.optimizer = optimizer["SGD"](self.model.parameters(), 0.1, momentum=0.9)
 
 		
 	def set_model(self, model):
@@ -83,7 +83,7 @@ class Trainer():
 		mean_numer_of_runs = []
 		
 		for epoch in range(epochs):
-			elements = [i for i in range(len(self.train_dataset))]
+			elements = [i for i in range(len(self.train_dataset))][:100]
 			
 			sum_loss = 0
 			no_epoch_runs = []

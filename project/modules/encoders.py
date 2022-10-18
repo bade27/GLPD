@@ -18,6 +18,9 @@ class FirstEncoder(torch.nn.Module):
       # GCN
       self.conv1 = GCNConv(features_size, features_size)
       self.conv2 = GCNConv(features_size, features_size)
+      self.conv3 = GCNConv(features_size, features_size)
+      self.conv4 = GCNConv(features_size, features_size)
+      
 
       self.preprocess = Linear(input_size, features_size)
 
@@ -35,11 +38,23 @@ class FirstEncoder(torch.nn.Module):
       x = self.relu(x)
     else:
       x = self.preprocess(x)
+      
       x1 = self.conv1(x, edge_index)
+      x1 = self.relu(x1)
       x = x + x1
-      x2 = self.conv2(x, edge_index)
+
+      x2 = self.conv1(x, edge_index)
+      x2 = self.relu(x2)
       x = x + x2
-      x = self.relu(x)
+
+      x3 = self.conv1(x, edge_index)
+      x3 = self.relu(x3)
+      x = x + x3
+
+      x4 = self.conv1(x, edge_index)
+      x4 = self.relu(x4)
+      x = x + x4
+      
        
     return x
 
