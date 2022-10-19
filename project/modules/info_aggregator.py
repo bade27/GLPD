@@ -1,7 +1,7 @@
 import random
 import torch
 from modules.encoders import SecondEncoder
-from utils.graph_utils import get_forward_star
+from torch.nn.functional import normalize
 
 
 class InfoAggregator(torch.nn.Module):
@@ -22,8 +22,8 @@ class InfoAggregator(torch.nn.Module):
         for variant in variants:
             # embeddings = prev_embeddings
             activities = variant
-            places_info = torch.zeros(len(nodes), self.cat_embedding_size, device=self.device)
-            prev_embedding_summary = 0
+            # places_info = torch.zeros(len(nodes), self.cat_embedding_size, device=self.device)
+            # prev_embedding_summary = 0
 
             in_variant_places_temp_info = {}
 
@@ -90,7 +90,8 @@ class InfoAggregator(torch.nn.Module):
             for p,e in in_variant_places_temp_info.items():
                 if p not in places_temp_info:
                     places_temp_info[p] = []
-                places_temp_info[p].append(torch.mean(torch.stack(e)))
+                places_temp_info[p].append(normalize(torch.mean(torch.stack(e)), p=2.0, dim = 0))
+                # places_temp_info[p].append(torch.mean(torch.stack(e)))
 
         for p,e in places_temp_info.items():
             final_places_info[p] += torch.mean(torch.stack(e))

@@ -37,7 +37,7 @@ class Chooser(torch.nn.Module):
 
 		chosen_places = set()
 
-		pool_of_places, _ = get_forward_star(original, activity)
+		pool_of_places = [nodes.index(p) for p in next_places]
 
 		available_places = list(set(pool_of_places).difference(set(self.chosen_nodes)))
 		pool_of_places = available_places.copy()
@@ -59,22 +59,24 @@ class Chooser(torch.nn.Module):
 		pool_of_places.sort(key = lambda x: ranking_map[x])
 
 		reached = set()
+		cnext_places = [plc for plc in nextt[nodes[activity]] if self.mask[nodes.index(plc)]]
+		for np in cnext_places:
+			for na in nextt[np]:
+				reached.add(na)
+
+		idx = 0
 
 		while len(to_reach.difference(reached)) > 0:
-			for position in ranking:
-				place = available_places[position.item()]
-				if not self.mask[place]:
-					self.mask[place] = True
-					chosen_places.add(place)
-					# probability = distribution[position.item()]
-					# self.probabilities.append(probability.unsqueeze(-1))
-					break
-			
-			cnext_places = [plc for plc in nextt[nodes[activity]] if self.mask[nodes.index(plc)]]
-			reached = set()
-			for np in cnext_places:
-				for na in nextt[np]:
-					reached.add(na)
+			place = pool_of_places[idx]
+			if not self.mask[place]:
+				self.mask[place] = True
+				chosen_places.add(place)			
+				cnext_places = [plc for plc in nextt[nodes[activity]] if self.mask[nodes.index(plc)]]
+				reached = set()
+				for np in cnext_places:
+					for na in nextt[np]:
+						reached.add(na)
+			idx += 1
 
 		if len(chosen_places) > 0:
 			probabilities = self.sigmoid(scores)[[pool_of_places.index(place) for place in chosen_places]]
@@ -85,9 +87,10 @@ class Chooser(torch.nn.Module):
 				# print("prob ", probability-self.epsilon)
 				# print("sum ", torch.sum(probabilities))
 				# print((probability-self.epsilon) / torch.sum(probabilities))
-				self.probabilities.append(
-					torch.log(
-						(probability) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
-						).unsqueeze(-1)
-					)
+				# self.probabilities.append(
+				# 	torch.log(
+				# 		(probability) / (torch.sum(probabilities)+self.epsilon) + self.epsilon
+				# 		).unsqueeze(-1)
+				# 	)
+				self.probabilities.append(torch.log(probability+self.epsilon).unsqueeze(-1))
 		return chosen_places

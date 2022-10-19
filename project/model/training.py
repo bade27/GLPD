@@ -31,9 +31,10 @@ optimizer = {"ADAM":torch.optim.Adam, "SGD":torch.optim.SGD}
 
 
 class Trainer():
-	def __init__(self, base_dir, optimizer_name, lr, gnn_type, type_of_features="temporal"):
+	def __init__(self, base_dir, optimizer_name, lr, gnn_type, momentum=0.0, type_of_features="temporal"):
 		self.optimizer_name = optimizer_name
 		self.lr = lr
+		self.momenutm = momentum
 		self.gnn_type = gnn_type
 		self.base_dir = base_dir
 
@@ -62,8 +63,12 @@ class Trainer():
 		self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
 			
 		self.model = self.model.to(self.device)
-		# self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
-		self.optimizer = optimizer["SGD"](self.model.parameters(), 0.1, momentum=0.9)
+
+		if self.optimizer_name == "SGD":
+			self.optimizer = optimizer["SGD"](self.model.parameters(), self.lr, momentum=self.momenutm)
+		else:
+			self.optimizer = optimizer["ADAM"](self.model.parameters(), self.lr)
+		
 
 		
 	def set_model(self, model):
@@ -83,7 +88,7 @@ class Trainer():
 		mean_numer_of_runs = []
 		
 		for epoch in range(epochs):
-			elements = [i for i in range(len(self.train_dataset))][:100]
+			elements = [i for i in range(len(self.train_dataset))]
 			
 			sum_loss = 0
 			no_epoch_runs = []
@@ -97,13 +102,14 @@ class Trainer():
 				prev_prob = 0
 				
 				for run in tqdm(range(max_runs)):
+				# for run in range(max_runs):
 					self.model.train()
 					self.optimizer.zero_grad()
 					score = self.model(x, edge_index, original, nodes, variants, order, nextt)
-					loss = score
+					loss = score # torch.abs(score - prev_prob)
 					loss.backward()
 					self.optimizer.step()
-					cumulative_loss.append(score.item())
+					cumulative_loss.append(loss.item())
 					no_runs += 1
 					if abs(score - prev_prob) < theta and run > 0:
 						break
