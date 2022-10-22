@@ -1,8 +1,6 @@
 from pathlib import Path
 import sys
 
-from sklearn import cluster
-
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
 
@@ -15,9 +13,9 @@ import torch
 from tqdm import tqdm
 import networkx as nx
 from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_move_files
-from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, temporal_embedding, draw_networkx, get_backward_star, get_forward_star, mean_node_degree, std_node_degree, get_activity_order, get_next_node
-from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, find_actual_places, reduce_silent_transitions, back_to_petri
-from utils.pm4py_utils import display_petri_net, generate_trees, is_sound, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml, load_log_xes
+from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, reduce_silent_transitions
+from utils.pm4py_utils import display_petri_net, generate_trees, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml, load_log_xes
+from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, temporal_embedding, draw_networkx, get_backward_star, get_forward_star, mean_node_degree, std_node_degree, get_activity_order, get_next_nodes, get_prev_nodes
 from sklearn.cluster import KMeans
 import model.structure as model_structure
 import shutil
@@ -39,6 +37,7 @@ class Dataset():
 		self.graph_variants_dir = os.path.join(self.graphs_dir, "variants")
 		self.graph_order_dir = os.path.join(self.graphs_dir, "order")
 		self.graph_next_dir = os.path.join(self.graphs_dir, "next")
+		self.graph_prev_dir = os.path.join(self.graphs_dir, "prev")
 		self.saved_dir = os.path.join(self.data_dir, "saved_images_pnml")
 		self.networkx_dir = os.path.join(self.data_dir, 'networkx')
 		self.alpha_relations_dir = os.path.join(self.graphs_dir, 'alpha_relations')
@@ -54,7 +53,7 @@ class Dataset():
 			self.logs_dir, self.raw_dir, self.graph_nodes_dir, self.graph_variants_dir,
 			self.networkx_dir, self.alpha_relations_dir, self.saved_dir,
 			self.input_dir, self.input_dir_imgs, self.input_dir_pnml,
-			self.graph_order_dir, self.graph_next_dir
+			self.graph_order_dir, self.graph_next_dir, self.graph_prev_dir
 		]
 
 		if self.synth:
@@ -284,7 +283,8 @@ class Dataset():
 				variants = get_variants_parsed(log, k)
 
 				activity_order = get_activity_order(original_edge_index, nodes)
-				next_nodes = get_next_node(original_edge_index, nodes)
+				next_nodes = get_next_nodes(original_edge_index, nodes)
+				prev_nodes = get_prev_nodes(original_edge_index, nodes)
 
 				# save files
 				torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(number_of_models).zfill(pad) + ".pt"))
@@ -339,6 +339,9 @@ class Dataset():
 
 				next_nodes_file_name = os.path.join(self.graph_next_dir, "next_" + str(number_of_models).zfill(pad))
 				dump_to_pickle(next_nodes_file_name, next_nodes)
+
+				prev_nodes_file_name = os.path.join(self.graph_prev_dir, "prev_" + str(number_of_models).zfill(pad))
+				dump_to_pickle(prev_nodes_file_name, prev_nodes)
 
 				save_log_xes(log, os.path.join(self.logs_dir, "log_" + str(number_of_models).zfill(pad) + '.xes'))
 
@@ -495,6 +498,7 @@ class Dataset():
 		train_alpha_relations_dir = os.path.join(train_graphs_dir, "alpha_relations")
 		train_order_dir = os.path.join(train_graphs_dir, "order")
 		train_next_dir = os.path.join(train_graphs_dir, "next")
+		train_prev_dir = os.path.join(train_graphs_dir, "prev")
 
 		train_saved_dir = os.path.join(train_graphs_dir, "saved_images_pnml")
 		train_input_dir = os.path.join(train_saved_dir, "input_net")
@@ -513,7 +517,7 @@ class Dataset():
 			train_graphs_dir, train_logs_dir, train_nodes_dir, train_raw_dir, train_variants_dir,
 			train_alpha_relations_dir, train_saved_dir, train_input_dir, train_input_dir_imgs, 
 			train_input_dir_pnml, train_original_dir, train_original_dir_imgs, train_original_dir_pnml,
-			train_order_dir, train_next_dir]
+			train_order_dir, train_next_dir, train_prev_dir]
 			# train_reconstructed_dir, train_reconstructed_dir_imgs, train_reconstructed_dir_pnml]
 
 
@@ -555,6 +559,7 @@ class Dataset():
 		test_alpha_relations_dir = os.path.join(test_graphs_dir, "alpha_relations")
 		test_order_dir = os.path.join(test_graphs_dir, "order")
 		test_next_dir = os.path.join(test_graphs_dir, "next")
+		test_prev_dir = os.path.join(test_graphs_dir, "prev")
 
 		test_saved_dir = os.path.join(test_graphs_dir, "saved_images_pnml")
 		test_input_dir = os.path.join(test_saved_dir, "input_nets")
@@ -572,7 +577,7 @@ class Dataset():
 		test_dirs = [test_graphs_dir, test_logs_dir, test_nodes_dir, test_raw_dir, test_variants_dir,
 			test_saved_dir, test_input_dir, test_input_dir_imgs, test_input_dir_pnml,
 			test_alpha_relations_dir, test_original_dir, test_original_dir_imgs, test_original_dir_pnml,
-			test_order_dir, test_next_dir]
+                    test_order_dir, test_next_dir, test_prev_dir]
 			# test_reconstructed_dir, test_reconstructed_dir_imgs, test_reconstructed_dir_pnml]
 
 		
@@ -671,6 +676,13 @@ class Dataset():
 			os.path.join(self.graphs_dir, "next"),
 			# [train_raw_dir,validation_raw_dir,test_raw_dir], 
 			[train_next_dir, test_next_dir],
+			train_graphs, test_graphs)
+		
+		# split and move prev
+		split_move_files(
+			os.path.join(self.graphs_dir, "prev"),
+			# [train_raw_dir,validation_raw_dir,test_raw_dir], 
+			[train_prev_dir, test_prev_dir],
 			train_graphs, test_graphs)
 
 		# split and move imgs and pnml ######################################################################################

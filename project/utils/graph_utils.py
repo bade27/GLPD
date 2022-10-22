@@ -302,7 +302,7 @@ def std_node_degree(nodes, edge_index):
 	return std
 
 
-def add_silent_transitions(edge_index, mask, nodes, ar):
+def add_silent_transitions(edge_index, nextt, prev, mask, nodes, ar):
 	places = [idx for idx in range(nodes.index('|')+1, len(nodes))]
 
 	direct_succession = ar["direct_succession"]
@@ -313,9 +313,9 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 	for place in places:
 		following_places[place] = set()
 		if mask[place]:
-			forward, _ = get_forward_star(edge_index, place)
+			forward = [nodes.index(act) for act in nextt[nodes[place]]]
 			for activity in forward:
-				next_places, _ = get_forward_star(edge_index, activity)
+				next_places = [nodes.index(plc) for plc in nextt[nodes[activity]]]
 				for np in next_places:
 					if mask[np]:
 						following_places[place].add(np)
@@ -329,8 +329,8 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 	for position in candidate_positions:
 		src, dst = position
 
-		backward, _ = get_backward_star(edge_index, src)
-		forward, _ = get_forward_star(edge_index, dst)
+		backward = [nodes.index(act) for act in prev[nodes[src]]]
+		forward = [nodes.index(act) for act in nextt[nodes[dst]]]
 
 		for b in backward:
 			for f in forward:
@@ -374,7 +374,7 @@ def get_activity_order(edge_index, nodes):
 	return [i for i in order if i <= nodes.index('|')]
 	
 
-def get_next_node(edge_index, nodes):
+def get_next_nodes(edge_index, nodes):
 	queue = [torch.min(edge_index).item()]
 	visited = set()
 
@@ -390,3 +390,22 @@ def get_next_node(edge_index, nodes):
 			visited.add(current)
 
 	return followers
+
+
+def get_prev_nodes(edge_index, nodes):
+	swapped_edge_index = edge_index[[1,0]]
+	queue = [nodes.index('|')]
+	visited = set()
+
+	predecessors = {node:set() for node in nodes}
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			for i in range(len(swapped_edge_index[0])):
+				if swapped_edge_index[0][i].item() == current:
+					queue.append(swapped_edge_index[1][i].item())
+					predecessors[nodes[current]].add(nodes[swapped_edge_index[1][i].item()])
+			visited.add(current)
+
+	return predecessors

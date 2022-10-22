@@ -110,7 +110,7 @@ class Trainer():
 			
 			random.shuffle(elements)
 			for i in tqdm(elements):
-				x, edge_index, original, nodes, variants, order, nextt = self.train_dataset[i]
+				x, edge_index, original, nodes, variants, order, nextt, _ = self.train_dataset[i]
 				
 				cumulative_loss = []
 				no_runs = 0
@@ -199,7 +199,7 @@ class Trainer():
 		connected = 0
 
 		for i in tqdm(range(len(self.test_dataset))):
-			x, edge_index, original, nodes, variants, order, nextt = self.test_dataset[i]
+			x, edge_index, original, nodes, variants, order, nextt, prev = self.test_dataset[i]
 			places = self.model(x, edge_index, original, nodes, variants, order, nextt)
 
 			mask = ['p' not in n for n in nodes]
@@ -213,7 +213,7 @@ class Trainer():
 			if silent_transitions:
 				alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
 				
-				new_edge_index, new_nodes, new_mask = add_silent_transitions(original, mask, nodes, alpha_relations)
+				new_edge_index, new_nodes, new_mask = add_silent_transitions(original, nextt, prev, mask, nodes, alpha_relations)
 				# print(new_nodes)
 				# for _ in range(len(new_nodes) - len(nodes)):
 				# 	mask.append(True)

@@ -10,7 +10,8 @@ import os
 from utils.general_utils import copy_dir
 from model.training import Trainer
 
-base_dir = "/home/linuxpc/Documenti/TESI/data/"
+# base_dir = "/home/linuxpc/Documenti/TESI/data/"
+base_dir = "/home/linuxpc/Documenti/TESI_W_PREV/data/"
 model_path = "/home/linuxpc/Documenti/TESI/best_model/self_supervised_97.pt"
 
 copy_before_split = os.path.join(base_dir, '..', "data_before_split")
@@ -40,5 +41,5 @@ dataset.set_statistics(
 # trainer = Trainer(base_dir, do_train=True, optimizer_name="SGD", lr=1e-4, gnn_type="gcn", momentum=0.0)
 # trainer.train(100, 10, 30)
 trainer = Trainer(base_dir, do_test=True, model_path=model_path, gnn_type="gcn", type_of_features="temporal")
-# trainer.test()
+trainer.test()
 trainer.test(silent_transitions=True)

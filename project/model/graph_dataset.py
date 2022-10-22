@@ -23,6 +23,7 @@ class MetaDataset(Dataset):
     self.graph_dir = os.path.join(self.base_dir, 'raw')
     self.order_dir = os.path.join(self.base_dir, 'order')
     self.next_dir = os.path.join(self.base_dir, 'next')
+    self.prev_dir = os.path.join(self.base_dir, 'prev')
 
     # list of names
     self.nodes_names = sorted(os.listdir(self.nodes_dir))
@@ -36,6 +37,7 @@ class MetaDataset(Dataset):
       self.features_size = torch.load(os.path.join(self.graph_dir, "features", self.x_names[0])).shape[1]
     self.order_names = sorted(os.listdir(self.order_dir))
     self.next_names = sorted(os.listdir(self.next_dir))
+    self.prev_names = sorted(os.listdir(self.prev_dir))
 
     # data
     self.edge_indices_list = []
@@ -85,6 +87,12 @@ class MetaDataset(Dataset):
       next_f = os.path.join(self.next_dir, next_name)
       nextt = load_pickle(next_f)
       self.next_list.append(nextt)
+    
+    self.prev_list = []
+    for prev_name in self.prev_names:
+      prev_f = os.path.join(self.prev_dir, prev_name)
+      prev = load_pickle(prev_f)
+      self.prev_list.append(prev)
   
 
   def __len__(self):
@@ -94,6 +102,7 @@ class MetaDataset(Dataset):
     assert len(self.nodes_names) == len(self.variants_names)
     assert len(self.nodes_names) == len(self.order_names)
     assert len(self.order_names) == len(self.next_names)
+    assert len(self.prev_names) == len(self.next_names)
 
     return len(self.index_names)
 
@@ -105,5 +114,6 @@ class MetaDataset(Dataset):
     variants = self.variants_list[idx]
     order = self.order_list[idx]
     nextt = self.next_list[idx]
+    prev = self.prev_list[idx]
 
-    return x, edge_index, original, nodes, variants, order, nextt
+    return x, edge_index, original, nodes, variants, order, nextt, prev
