@@ -3,6 +3,7 @@ import torch
 from modules.encoders import FirstEncoder
 from modules.chooser import Chooser
 from modules.info_aggregator import InfoAggregator
+from modules.decoder import DecoderMLP
 
 
 class SelfSupPredictor(torch.nn.Module):
@@ -15,13 +16,14 @@ class SelfSupPredictor(torch.nn.Module):
 		self.device = device
 		self.first_encoder = FirstEncoder(num_node_features, embedding_size, kind=encoder)
 		self.aggregator = InfoAggregator(embedding_size, device, kind=encoder)
-		self.chooser = Chooser(embedding_size*3, output_size)
+		self.decoder = DecoderMLP(embedding_size, output_size)
+		self.chooser = Chooser(self.device)
 
 	def forward(self, x, edge_index, original, nodes, variants, order, nextt):
 		self.chooser.ready_for_training(nodes)
 		if self.training:
 			_ = self.forward_training(x, edge_index, original, nodes, variants, order, nextt)
-			return -self.chooser.get_score() # / len(self.chooser.probabilities)
+			return self.chooser.get_probabilities() # / len(self.chooser.probabilities)
 		else:
 			return self.inference(x, edge_index, original, nodes, variants, order, nextt)
 
@@ -39,8 +41,9 @@ class SelfSupPredictor(torch.nn.Module):
 		actual_activities = set([i for i in range(nodes.index('|')+1)])
 		assert check_found_activities == actual_activities
 
+		output = self.decoder(embeddings).squeeze()
 		for activity in order:
-			chosen_places = self.chooser(final_places_info, activity, original, nodes, nextt)
+			chosen_places = self.chooser(output, activity, original, nodes, nextt)
 			for chosen_place in chosen_places:
 				places.add(chosen_place)
 

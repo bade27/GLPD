@@ -98,9 +98,9 @@ class MetaDataset(Dataset):
     return len(self.index_names)
 
   def __getitem__(self, idx):
-    x = self.xs_list[idx].to(self.device)
-    edge_index = self.edge_indices_list[idx].to(self.device)
-    original = self.originals_list[idx].to(self.device)
+    x = (self.xs_list[idx]).to(self.device)
+    edge_index = (self.edge_indices_list[idx]).to(self.device)
+    original = (self.originals_list[idx]).to(self.device)
     nodes = self.nodes_list[idx]
     variants = self.variants_list[idx]
     order = self.order_list[idx]

@@ -352,8 +352,9 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 		edge_index = torch.cat((edge_index, new_edge_index), dim=1)
 
 		nodes = nodes + new_nodes
+		mask = mask + [True]*len(new_nodes)
 
-	return edge_index, nodes
+	return edge_index, nodes, mask
 
 
 def get_activity_order(edge_index, nodes):

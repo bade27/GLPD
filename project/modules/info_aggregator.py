@@ -90,10 +90,10 @@ class InfoAggregator(torch.nn.Module):
             for p,e in in_variant_places_temp_info.items():
                 if p not in places_temp_info:
                     places_temp_info[p] = []
-                places_temp_info[p].append(normalize(torch.mean(torch.stack(e)), p=2.0, dim = 0))
-                # places_temp_info[p].append(torch.mean(torch.stack(e)))
+                # places_temp_info[p].append(normalize(torch.mean(torch.stack(e)), p=2.0, dim = 0))
+                places_temp_info[p].append(torch.mean(torch.stack(e)))
 
         for p,e in places_temp_info.items():
             final_places_info[p] += torch.mean(torch.stack(e))
 
-        return final_places_info
+        return normalize(final_places_info, p=2.0, dim=0)
