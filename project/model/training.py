@@ -18,12 +18,13 @@ from model.graph_dataset import MetaDataset
 from model.self_supervised import SelfSupPredictor
 import random
 import matplotlib.pyplot as plt
-from model.supervised import SupervisedPredictor
 from utils.general_utils import create_dirs
 from utils.general_utils import load_pickle
-from utils.graph_utils import is_graph_connected, add_silent_transitions
+from utils.graph_utils import add_silent_transitions
 from utils.petri_net_utils import back_to_petri
-from utils.pm4py_utils import is_sound, save_petri_net_to_img, save_petri_net_to_pnml
+from utils.pm4py_utils import save_petri_net_to_img, save_petri_net_to_pnml
+from pm4py.algo.evaluation import algorithm as evaluator
+import json
 
 
 difference = lambda x, y: abs((-torch.sum(x)-torch.sum(y)).item())
@@ -183,7 +184,9 @@ class Trainer():
 
 		img_dir = os.path.join(self.inference_dir, "images")
 		pnml_dir = os.path.join(self.inference_dir, "pnml")
+		results_dir = os.path.join(self.inference_dir, "results")
 		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")
+		logs_dir = os.path.join(self.base_dir, "test_graphs", "logs")
 
 		create_dirs([img_dir, pnml_dir])
 
@@ -191,12 +194,10 @@ class Trainer():
 		assert len(idxes) == len(self.test_dataset)
 
 		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
+		log_names = sorted(os.listdir(logs_dir))
 
 		self.model.eval()
 		
-
-		sound_nets = 0
-		connected = 0
 
 		for i in tqdm(range(len(self.test_dataset))):
 			x, edge_index, original, nodes, variants, order, nextt, prev = self.test_dataset[i]
@@ -206,33 +207,11 @@ class Trainer():
 			for place in places:
 				mask[place] = True
 
-			# connected += int(is_graph_connected(original, mask))
-
 			assert sum(mask[:nodes.index('|')+1]) == nodes.index('|')+1
 
 			if silent_transitions:
 				alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
-				
 				new_edge_index, new_nodes, new_mask = add_silent_transitions(original, nextt, prev, mask, nodes, alpha_relations)
-				# print(new_nodes)
-				# for _ in range(len(new_nodes) - len(nodes)):
-				# 	mask.append(True)
-
-				# excluded = set([i for i in range(len(mask)) if not mask[i]])
-				# to_check = set()
-				# for item in excluded:
-				# 	for h in range(len(edge_index[0])):
-				# 		if edge_index[0][h].item() == item:
-				# 			to_check.add(edge_index[1][h].item())
-				# 		elif edge_index[1][h].item() == item:
-				# 			to_check.add(edge_index[0][h].item())
-				# for t in to_check:
-				# 	if "silent" in nodes[t]:
-				# 		excluded.add(t)
-
-				# for k in range(len(mask)):
-				# 	if i in excluded:
-				# 		mask[k] = False
 			else:
 				new_edge_index = original
 				new_nodes = nodes
@@ -240,8 +219,15 @@ class Trainer():
 
 
 			net, im, fm = back_to_petri(new_edge_index, new_nodes, new_mask)
-			# sound_nets += int(is_sound(net, im, fm))
+			
 			name = "model_" + str(idxes[i])
+
+			net, im, fm = back_to_petri(edge_index, nodes, mask)
+
+			log = load_pickle(os.path.join(logs_dir, log_names[i]))
+			evaluation = evaluator.apply(log, net, im, fm)
+			with open(os.path.join(results_dir, name+".txt"), "w") as file:
+				file.write(json.dumps(evaluation))
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
 			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))

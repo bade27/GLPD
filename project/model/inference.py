@@ -16,6 +16,8 @@ from model import structure as st
 from utils.graph_utils import add_silent_transitions
 from utils.pm4py_utils import save_petri_net_to_img, save_petri_net_to_pnml
 from utils.petri_net_utils import back_to_petri
+from pm4py.algo.evaluation import algorithm as evaluator
+import json
 
 
 def infer(data_dir, log_filename, model_filename, silent_transitions=False, preprocessing=False):
@@ -51,7 +53,7 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 	original = torch.load(os.path.join(raw_dir, original_filename))
 	edge_index = torch.load(os.path.join(raw_dir, edge_index_filename))
 	nodes = load_pickle(os.path.join(nodes_dir, nodes_filename))
-	logs = pm4py.read_xes(os.path.join(logs_dir, logs_filename))
+	log = pm4py.read_xes(os.path.join(logs_dir, logs_filename))
 	nextt = load_pickle(os.path.join(next_dir, next_filename))
 	prev = load_pickle(os.path.join(prev_dir, prev_filename))
 	order = load_pickle(os.path.join(order_dir, order_filename))
@@ -81,6 +83,9 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 	print(f"discovered {sum(mask[nodes.index('|')+1:])}/{len(mask[nodes.index('|')+1:])} places")
 
 	net, im, fm = back_to_petri(edge_index, nodes, mask)
+	evaluation = evaluator.apply(log, net, im, fm)
+	with open(os.path.join(destination_dir, "evaluation.txt"), "w") as file:
+		file.write(json.dumps(evaluation))
 
 	save_petri_net_to_img(net, im, fm, os.path.join(img_dir, 'net.png'))
 	save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, 'net.pnml'))
@@ -98,9 +103,13 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 		print(f"{len(silent)} silent transitions added")
 
 		s_net, s_im, s_fm = back_to_petri(new_edge_index, new_nodes, new_mask)
+		s_evaluation = evaluator.apply(log, s_net, s_im, s_fm)
+		with open(os.path.join(destination_dir+"_silent", "silent_evaluation.txt"), "w") as file:
+			file.write(json.dumps(s_evaluation))
 
 		save_petri_net_to_img(s_net, s_im, s_fm, os.path.join(s_img_dir, 'net.png'))
 		save_petri_net_to_pnml(s_net, s_im, s_fm, os.path.join(s_pnml_dir, 'net.pnml'))
+
 
 
 # data_dir = "/home/linuxpc/MEGAsync/classical_miners/BPI_2012/"
