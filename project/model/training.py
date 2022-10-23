@@ -233,7 +233,7 @@ class Trainer():
 
 			with open(os.path.join(results_dir, "info_"+name+".txt"), "w") as file:
 				no_places = sum(new_mask[new_nodes.index('|')+1:])/len(new_mask[new_nodes.index('|')+1:])
-				no_silent = len([node for node in new_nodes if "silent" in new_nodes])
+				no_silent = len([node for node in new_nodes if "silent_" in node])
 				file.write(json.dumps({"no_places":no_places,"no_silent":no_silent}))
 
 		# print(f'number of sound graphs {sound_nets}/{len(self.test_dataset)}')

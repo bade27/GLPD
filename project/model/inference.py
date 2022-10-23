@@ -82,7 +82,7 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 
 	print(f"discovered {sum(mask[nodes.index('|')+1:])}/{len(mask[nodes.index('|')+1:])} places")
 
-	net, im, fm = back_to_petri(edge_index, nodes, mask)
+	net, im, fm = back_to_petri(original, nodes, mask)
 
 	save_petri_net_to_img(net, im, fm, os.path.join(img_dir, 'net.png'))
 	save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, 'net.pnml'))
@@ -128,3 +128,10 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 # log_filename = "BPI_Challenge_2012_reducted.xes"
 # model_filename = "/home/linuxpc/Documenti/TESI/best_model/self_supervised_97.pt"
 # infer(data_dir, log_filename, model_filename, silent_transitions=True)
+
+real_logs_dir = "D:\\MEGA\\MEGAsync\\my_project\\"
+model_path = "D:\\MEGA\\MEGAsync\\trained_model\\best_model\\self_supervised_97.pt"
+for folder in os.listdir(real_logs_dir):
+	log_filename = [file for file in os.listdir(os.path.join(real_logs_dir, folder)) if "xes" in file][0]
+	dirdir = os.path.join(real_logs_dir, folder)
+	infer(dirdir, log_filename, model_path, silent_transitions=True, preprocessing=True)

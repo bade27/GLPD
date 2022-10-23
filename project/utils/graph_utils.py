@@ -326,6 +326,9 @@ def add_silent_transitions(edge_index, nextt, prev, mask, nodes, ar):
 	new_nodes = []
 	new_arcs = [[],[]]
 
+	already_connected = set()
+	chosen_candidates = set()
+
 	for position in candidate_positions:
 		src, dst = position
 
@@ -334,6 +337,11 @@ def add_silent_transitions(edge_index, nextt, prev, mask, nodes, ar):
 
 		for b in backward:
 			for f in forward:
+				if (b,f) in already_connected or (f,b) in already_connected:
+					continue
+				already_connected.add((b,f))
+				chosen_candidates.add(position)
+
 				if nodes[b] in direct_succession and nodes[f] in direct_succession[nodes[b]]:
 					new_nodes.append("silent_" + str(no_silent))
 					new_arcs[0].append(src)
@@ -354,6 +362,7 @@ def add_silent_transitions(edge_index, nextt, prev, mask, nodes, ar):
 		nodes = nodes + new_nodes
 		mask = mask + [True]*len(new_nodes)
 
+	print(f"\nadded {len(chosen_candidates)}/{len(candidate_positions)} silent transitions")
 	return edge_index, nodes, mask
 
 

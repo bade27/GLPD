@@ -180,6 +180,12 @@ class Dataset():
 					# log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
 				else:
 					log = self.log
+					df_from_log = pm4py.convert_to_dataframe(log)
+					df_frequent_act = df_from_log["concept:name"].value_counts()
+					top_18 = df_frequent_act.sort_values(ascending=False)[:18]
+					df_from_log = df_from_log[df_from_log["concept:name"].isin(top_18.index)]
+					assert 0 < len(df_from_log["concept:name"].unique()) <= 18
+					log = pm4py.convert_to_event_log(df_from_log)
 				
 				unique_activities = set()
 
@@ -195,8 +201,8 @@ class Dataset():
 				df_start_finish = pd.DataFrame()
 				for case in df["case"].unique():
 					current_case = df[df["case"]==case].copy()
-					df_start = pd.DataFrame({"activity":'>', "timestamp":None, "case":case},index=[0])
-					df_finish = pd.DataFrame({"activity":'|', "timestamp":None, "case":case},index=[0])
+					df_start = pd.DataFrame({"activity":'>', "timestamp":0, "case":case},index=[0])
+					df_finish = pd.DataFrame({"activity":'|', "timestamp":0, "case":case},index=[0])
 					df_start_finish = pd.concat([df_start_finish, df_start], axis=0)
 					df_start_finish = pd.concat([df_start_finish, current_case], axis=0)
 					df_start_finish = pd.concat([df_start_finish, df_finish], axis=0)
