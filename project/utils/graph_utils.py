@@ -393,7 +393,8 @@ def get_next_nodes(edge_index, nodes):
 
 
 def get_prev_nodes(edge_index, nodes):
-	swapped_edge_index = edge_index[[1,0]]
+	swapped_edge_index = edge_index.clone()
+	swapped_edge_index = swapped_edge_index[[1,0]]
 	queue = [nodes.index('|')]
 	visited = set()
 

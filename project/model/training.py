@@ -188,7 +188,7 @@ class Trainer():
 		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")
 		logs_dir = os.path.join(self.base_dir, "test_graphs", "logs")
 
-		create_dirs([img_dir, pnml_dir])
+		create_dirs([img_dir, pnml_dir, results_dir])
 
 		idxes = [int(name.split('_')[1].split('.')[0]) for name in os.listdir(alpha_relations_dir)]
 		assert len(idxes) == len(self.test_dataset)
@@ -222,15 +222,19 @@ class Trainer():
 			
 			name = "model_" + str(idxes[i])
 
-			net, im, fm = back_to_petri(edge_index, nodes, mask)
-
-			log = load_pickle(os.path.join(logs_dir, log_names[i]))
-			evaluation = evaluator.apply(log, net, im, fm)
-			with open(os.path.join(results_dir, name+".txt"), "w") as file:
-				file.write(json.dumps(evaluation))
+			log = pm4py.read_xes(os.path.join(logs_dir, log_names[i]))
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
 			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))
+			
+			evaluation = evaluator.apply(log, net, im, fm)
+			with open(os.path.join(results_dir, "metrics_"+name+".txt"), "w") as file:
+				file.write(json.dumps(evaluation))
+
+			with open(os.path.join(results_dir, "info_"+name+".txt"), "w") as file:
+				no_places = sum(new_mask[new_nodes.index('|')+1:])/len(new_mask[new_nodes.index('|')+1:])
+				no_silent = len([node for node in new_nodes if "silent" in new_nodes])
+				file.write(json.dumps({"no_places":no_places,"no_silent":no_silent}))
 
 		# print(f'number of sound graphs {sound_nets}/{len(self.test_dataset)}')
 		# print(f'number of connected graphs {connected}/{len(self.test_dataset)}')

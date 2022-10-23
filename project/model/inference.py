@@ -83,12 +83,18 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 	print(f"discovered {sum(mask[nodes.index('|')+1:])}/{len(mask[nodes.index('|')+1:])} places")
 
 	net, im, fm = back_to_petri(edge_index, nodes, mask)
+
+	save_petri_net_to_img(net, im, fm, os.path.join(img_dir, 'net.png'))
+	save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, 'net.pnml'))
+
 	evaluation = evaluator.apply(log, net, im, fm)
 	with open(os.path.join(destination_dir, "evaluation.txt"), "w") as file:
 		file.write(json.dumps(evaluation))
 
-	save_petri_net_to_img(net, im, fm, os.path.join(img_dir, 'net.png'))
-	save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, 'net.pnml'))
+	with open(os.path.join(destination_dir, "info.txt"), "w") as file:
+		no_places = sum(mask[nodes.index('|')+1:])/len(mask[nodes.index('|')+1:])
+		no_silent = len([node for node in nodes if "silent" in nodes])
+		file.write(json.dumps({"no_places":no_places,"no_silent":no_silent}))
 
 	if silent_transitions:
 		print("adding silent transitions...", end=' ')
@@ -103,12 +109,18 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 		print(f"{len(silent)} silent transitions added")
 
 		s_net, s_im, s_fm = back_to_petri(new_edge_index, new_nodes, new_mask)
+
+		save_petri_net_to_img(s_net, s_im, s_fm, os.path.join(s_img_dir, 'net.png'))
+		save_petri_net_to_pnml(s_net, s_im, s_fm, os.path.join(s_pnml_dir, 'net.pnml'))
+
 		s_evaluation = evaluator.apply(log, s_net, s_im, s_fm)
 		with open(os.path.join(destination_dir+"_silent", "silent_evaluation.txt"), "w") as file:
 			file.write(json.dumps(s_evaluation))
 
-		save_petri_net_to_img(s_net, s_im, s_fm, os.path.join(s_img_dir, 'net.png'))
-		save_petri_net_to_pnml(s_net, s_im, s_fm, os.path.join(s_pnml_dir, 'net.pnml'))
+		with open(os.path.join(destination_dir+"_silent", "info.txt"), "w") as file:
+			no_places = sum(new_mask[new_nodes.index('|')+1:])/len(new_mask[new_nodes.index('|')+1:])
+			no_silent = len([node for node in new_nodes if "silent" in new_nodes])
+			file.write(json.dumps({"no_places":no_places,"no_silent":no_silent}))
 
 
 
