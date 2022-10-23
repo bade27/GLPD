@@ -2,6 +2,8 @@ from pathlib import Path
 import shutil
 import sys
 
+from scipy.stats import moment
+
 
 path = str(Path(Path(__file__).parent.absolute()).parent.absolute())
 sys.path.insert(0, path)
@@ -15,12 +17,14 @@ import model.structure as st
 from model.graph_dataset import MetaDataset
 from model.self_supervised import SelfSupPredictor
 import random
-from model.supervised import SupervisedPredictor
+import matplotlib.pyplot as plt
 from utils.general_utils import create_dirs
 from utils.general_utils import load_pickle
-from utils.graph_utils import is_graph_connected, add_silent_transitions
+from utils.graph_utils import add_silent_transitions
 from utils.petri_net_utils import back_to_petri
-from utils.pm4py_utils import is_sound, save_petri_net_to_img, save_petri_net_to_pnml
+from utils.pm4py_utils import save_petri_net_to_img, save_petri_net_to_pnml
+from pm4py.algo.evaluation import algorithm as evaluator
+import json
 
 
 difference = lambda x, y: abs((-torch.sum(x)-torch.sum(y)).item())
@@ -28,43 +32,59 @@ optimizer = {"ADAM":torch.optim.Adam, "SGD":torch.optim.SGD}
 
 
 class Trainer():
-	def __init__(self, model_type, base_dir, optimizer_name, lr, gnn_type, criterion=None, random_features=True):
+	def __init__(self, base_dir, do_train=False, do_test=False, model_path="", optimizer_name="ADAM", lr=1e-5, gnn_type="gcn", momentum=0.0, type_of_features="temporal"):
 		self.optimizer_name = optimizer_name
 		self.lr = lr
+		self.momenutm = momentum
 		self.gnn_type = gnn_type
-		self.model_type = model_type
 		self.base_dir = base_dir
-		self.model = None
-		self.device = None
-		self.optimizer = None
-		self.criterion = criterion
+		self.model_path = model_path
+		self.do_train = do_train
+		self.do_test = do_test
 
-		self.train_dataset = MetaDataset(os.path.join(self.base_dir, "train_graphs"), random_features=random_features)
-		self.valid_dataset = MetaDataset(os.path.join(self.base_dir, "validation_graphs"), random_features=random_features)
-		self.test_dataset = MetaDataset(os.path.join(self.base_dir, "test_graphs"), random_features=random_features)
+		self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+		# self.device = "cpu"
 
+		if self.test:
+			self.device = "cpu"
+
+		print(f"device: {self.device}")
+		print("loading datasets...")
+		if self.do_train:
+			self.train_dataset = MetaDataset(
+				os.path.join(self.base_dir, "train_graphs"), device=self.device, type_of_features=type_of_features)
+			print("train dataset loaded")
+		
+		if self.do_test:
+			self.test_dataset = MetaDataset(
+				os.path.join(self.base_dir, "test_graphs"), device=self.device, type_of_features=type_of_features)
+			print("test dataset loaded")
+		
 		random.seed(1234)
 
-		self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
-		self.best_model_dir = os.path.join(base_dir, "..", "best_model")
-		self.inference_dir = os.path.join(base_dir, "test_graphs", "inference")
-		create_dirs([self.checkpoints_dir, self.best_model_dir, self.inference_dir])
+		if self.train:
+			self.checkpoints_dir = os.path.join(base_dir, "..", "checkpoints")
+			self.best_model_dir = os.path.join(base_dir, "..", "best_model")
+			create_dirs([self.checkpoints_dir, self.best_model_dir])
+		if self.test:
+			self.inference_dir = os.path.join(base_dir, "test_graphs", "inference")
+			create_dirs([self.inference_dir])
 
 		num_node_features, features_size = st.num_node_features, st.features_size
 		
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.device = 'cpu'
+		output_size = st.output_size_self_sup
+		self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
+		if self.model_path != "":
+			self.model.load_state_dict(torch.load(self.model_path))
 
-		
-		if self.model_type == "supervised":
-			output_size = st.output_size_sup
-			self.model = SupervisedPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
-		else:
-			output_size = st.output_size_self_sup
-			self.model = SelfSupPredictor(num_node_features, features_size, output_size, self.gnn_type, self.device)
-			
 		self.model = self.model.to(self.device)
-		self.optimizer = optimizer[self.optimizer_name](self.model.parameters(), self.lr)
+
+		if self.train:
+			if self.optimizer_name == "SGD":
+				self.optimizer = optimizer["SGD"](self.model.parameters(), self.lr, momentum=self.momenutm)
+			else:
+				self.optimizer = optimizer["ADAM"](self.model.parameters(), self.lr)
+		
 
 		
 	def set_model(self, model):
@@ -74,55 +94,50 @@ class Trainer():
 		return self.model
 		
 		
-	def train(self, epochs, patience, max_runs=1):	
-		if self.model_type == 'supervised':
-			self.train_supervised(epochs, patience) 
-		else:
-			self.train_self_supervised(epochs, patience, max_runs)    
-			
-			
-	def train_self_supervised(self, epochs, patience, max_runs):
+	def train(self, epochs, patience, max_runs, theta=1e-3):
 		best_loss = float('+inf')
 		best_epoch = 0
+		no_epochs = 0
 		no_epochs_no_improv = 0
 
 		epoch_loss = []
+		mean_numer_of_runs = []
 		
 		for epoch in range(epochs):
 			elements = [i for i in range(len(self.train_dataset))]
 			
 			sum_loss = 0
+			no_epoch_runs = []
 			
 			random.shuffle(elements)
 			for i in tqdm(elements):
-				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
-				x = x.to(self.device)
-				edge_index = edge_index.to(self.device)
+				x, edge_index, original, nodes, variants, order, nextt, _ = self.train_dataset[i]
 				
 				cumulative_loss = []
+				no_runs = 0
 				prev_prob = 0
 				
-				while True:
+				# for run in tqdm(range(max_runs)):
+				for run in range(max_runs):
 					self.model.train()
 					self.optimizer.zero_grad()
-					score = self.model(x, edge_index, original, y, nodes, variants)
-					# print(score)
-					# print('*'*50)
-					loss = score
+					probabilities = self.model(x, edge_index, original, nodes, variants, order, nextt)
+					score = -probabilities.sum()
+					# regularization = probabilities.shape[0] / len(nodes[nodes.index('|')+1:])
+					loss = score # + 0.7 * regularization
 					loss.backward()
 					self.optimizer.step()
-
-					cumulative_loss.append(score.item())
-
-					if abs(score - prev_prob) < 1e-4:
+					cumulative_loss.append(loss.item())
+					no_runs += 1
+					if abs(score - prev_prob) < theta and run > 0:
 						break
-					
-					max_runs -= 1
-					if max_runs < 0:
-						break
+					prev_prob = loss.item()
 
 				sum_loss += np.mean(cumulative_loss)
 			
+				no_epoch_runs.append(no_runs)
+
+			mean_numer_of_runs.append(np.mean(no_epoch_runs))
 			epoch_loss.append(sum_loss)
 
 			print(f"epoch {epoch+1} - loss: {sum_loss}")
@@ -141,164 +156,85 @@ class Trainer():
 			else:
 				torch.save(self.model.state_dict(), os.path.join(self.checkpoints_dir, f"self_supervised_{epoch}.pt"))
 				
-		print(f"total epochs passed {no_epochs}")
-		print(f"best poch: {best_epoch}")
+		print(f"total epochs passed {no_epochs+1}")
+		print(f"best poch: {best_epoch+1}")
 		shutil.copy(
 			os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt"), 
 			os.path.join(self.best_model_dir, f"self_supervised_{best_epoch}.pt"))
 		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"self_supervised_{best_epoch}.pt")))
-
-
-	def train_supervised(self, epochs, patience):
-		max_accuracy = 0
-		best_epoch = 0
-		no_epochs_no_improv = 0
-
-		mean_loss = []
-		mean_acc = []
 		
-		for epoch in range(epochs):
-			epoch_loss = []
+		plt.plot([i for i in range(no_epochs+1)], epoch_loss)
+		plt.ylabel("Loss")
+		plt.xlabel("Epochs")
+		plt.savefig(os.path.join(self.base_dir, "loss.png"))
+		plt.close()
 
-			elements = [i for i in range(len(self.train_dataset))]
-			random.shuffle(elements)
-			
-			for i in tqdm(elements):
-				x, edge_index, original, y, nodes, variants = self.train_dataset[i]
-				x = x.to(self.device)
-				y = y.to(self.device)
-				edge_index = edge_index.to(self.device)
-				
-				self.model.train()
-				self.optimizer.zero_grad()
-				prediction = self.model(x, edge_index, original, y, nodes, variants)
-				loss = self.criterion(prediction, y)
-				loss.backward()
-				self.optimizer.step()
+		plt.plot([i for i in range(no_epochs+1)], mean_numer_of_runs)
+		plt.ylabel("Mean number of runs per epoch")
+		plt.xlabel("Epochs")
+		plt.savefig(os.path.join(self.base_dir, "runs.png"))
+		plt.close()
 
-				epoch_loss.append(loss.item())
-				
-			accuracy = self.validate()
 
-			mean_loss.append(np.mean(epoch_loss))
-			mean_acc.append(accuracy)
-			print(f"epoch {epoch+1} - loss: {mean_loss[-1]} - acc: {mean_acc[-1]}")
-
-			no_epochs = epoch
-			
-			if accuracy > max_accuracy:
-				no_epochs_no_improv = 0
-				best_epoch = epoch
-				max_accuracy = accuracy
-			else:
-				no_epochs_no_improv += 1
-				
-			if epoch > patience and no_epochs_no_improv == patience:
-				break
-			else:
-				torch.save(self.model.state_dict(), os.path.join(self.checkpoints_dir, f"supervised_{epoch}.pt"))
-				
-		print(f"total epochs passed {no_epochs}")
-		print(f"best poch: {best_epoch}")
-		self.model.load_state_dict(torch.load(os.path.join(self.checkpoints_dir, f"supervised_{best_epoch}.pt")))
-
-  
-	def validate(self):
-		self.model.eval()
-
-		accuracies = []
-
-		for i in tqdm(range(len(self.valid_dataset))):
-			x, edge_index, original, y, nodes, variants = self.valid_dataset[i]
-
-			x = x.to(self.device)
-			y = y.to(self.device)
-			edge_index = edge_index.to(self.device)
-
-			mask = self.model(x, edge_index, original, y, nodes, variants)
-
-			result = [int(v) for v in mask]
-
-			# assert sum(result[:nodes.index('|')+1]) == nodes.index('|')+1
-
-			print(result)
-
-			accuracy = sum(result[nodes.index('|')+1:]) / (len(result)-nodes.index('|')+1)
-			accuracies.append(accuracy)
-
-		return np.mean(accuracies)
-
-	
 	def test(self, silent_transitions=False):
-		if len(os.listdir(self.best_model_dir)) > 0:
-			file = os.listdir(self.best_model_dir)[0]
-			self.model.load_state_dict(torch.load(os.path.join(self.best_model_dir, file)))
-		
+		if silent_transitions:
+			self.inference_dir += "_silent"
+			if not os.path.exists(self.inference_dir):
+				os.mkdir(self.inference_dir)
+
 		img_dir = os.path.join(self.inference_dir, "images")
 		pnml_dir = os.path.join(self.inference_dir, "pnml")
+		results_dir = os.path.join(self.inference_dir, "results")
 		alpha_relations_dir = os.path.join(self.base_dir, "test_graphs", "alpha_relations")
+		logs_dir = os.path.join(self.base_dir, "test_graphs", "logs")
 
-		create_dirs([img_dir, pnml_dir])
+		create_dirs([img_dir, pnml_dir, results_dir])
 
 		idxes = [int(name.split('_')[1].split('.')[0]) for name in os.listdir(alpha_relations_dir)]
 		assert len(idxes) == len(self.test_dataset)
 
 		alpha_relations_names = sorted(os.listdir(alpha_relations_dir))
+		log_names = sorted(os.listdir(logs_dir))
 
 		self.model.eval()
-
-		sound_nets = 0
-		connected = 0
+		
 
 		for i in tqdm(range(len(self.test_dataset))):
-			x, edge_index, original, y, nodes, variants = self.test_dataset[i]
-
-			x = x.to(self.device)
-			edge_index = edge_index.to(self.device)
-
-			places = self.model(x, edge_index, original, y, nodes, variants)
+			x, edge_index, original, nodes, variants, order, nextt, prev = self.test_dataset[i]
+			places = self.model(x, edge_index, original, nodes, variants, order, nextt)
 
 			mask = ['p' not in n for n in nodes]
 			for place in places:
 				mask[place] = True
 
-			connected += int(is_graph_connected(original, mask))
-
 			assert sum(mask[:nodes.index('|')+1]) == nodes.index('|')+1
 
 			if silent_transitions:
 				alpha_relations = load_pickle(os.path.join(alpha_relations_dir, alpha_relations_names[i]))
-				new_edge_index, new_nodes = add_silent_transitions(original, mask, nodes, alpha_relations)
-
-				for _ in range(len(new_nodes) - len(nodes)):
-					mask.append(True)
-
-				excluded = set([i for i in range(len(mask)) if not mask[i]])
-				to_check = set()
-				for item in excluded:
-					for h in range(len(edge_index[0])):
-						if edge_index[0][h].item() == item:
-							to_check.add(edge_index[1][h].item())
-						elif edge_index[1][h].item() == item:
-							to_check.add(edge_index[0][h].item())
-				for t in to_check:
-					if "silent" in nodes[t]:
-						excluded.add(t)
-
-				for k in range(len(mask)):
-					if i in excluded:
-						mask[k] = False
+				new_edge_index, new_nodes, new_mask = add_silent_transitions(original, nextt, prev, mask, nodes, alpha_relations)
 			else:
 				new_edge_index = original
 				new_nodes = nodes
+				new_mask = mask
 
 
-			net, im, fm = back_to_petri(new_edge_index, new_nodes, mask)
-			sound_nets += int(is_sound(net, im, fm))
-			name = self.model_type + '_' + str(idxes[i])
+			net, im, fm = back_to_petri(new_edge_index, new_nodes, new_mask)
+			
+			name = "model_" + str(idxes[i])
+
+			log = pm4py.read_xes(os.path.join(logs_dir, log_names[i]))
 
 			save_petri_net_to_img(net, im, fm, os.path.join(img_dir, name + '.png'))
 			save_petri_net_to_pnml(net, im, fm, os.path.join(pnml_dir, name + '.pnml'))
+			
+			evaluation = evaluator.apply(log, net, im, fm)
+			with open(os.path.join(results_dir, "metrics_"+name+".txt"), "w") as file:
+				file.write(json.dumps(evaluation))
 
-		print(f'number of sound graphs {sound_nets}/{len(self.test_dataset)}')
-		print(f'number of connected graphs {connected}/{len(self.test_dataset)}')
+			with open(os.path.join(results_dir, "info_"+name+".txt"), "w") as file:
+				no_places = sum(new_mask[new_nodes.index('|')+1:])/len(new_mask[new_nodes.index('|')+1:])
+				no_silent = len([node for node in new_nodes if "silent_" in node])
+				file.write(json.dumps({"no_places":no_places,"no_silent":no_silent}))
+
+		# print(f'number of sound graphs {sound_nets}/{len(self.test_dataset)}')
+		# print(f'number of connected graphs {connected}/{len(self.test_dataset)}')

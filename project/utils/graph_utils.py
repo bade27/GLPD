@@ -29,7 +29,7 @@ def build_arcs_dataframe(df):
 
 
 def build_temp_graph(dataframe):
-	activities = dataframe["source"].unique()
+	activities = set(dataframe["source"].unique()).union({'|'})
 	temporal_graph = {}
 	for activity in activities:
 		df = dataframe[(dataframe["source"] == activity) | (dataframe["destination"] == activity)]
@@ -37,7 +37,7 @@ def build_temp_graph(dataframe):
 		for index, row in df.iterrows():
 			neighbor = row["source"] if row["source"] != activity else row["destination"]
 			temporal_neighborhood.append([index, neighbor])
-		temporal_graph[activity] = pd.DataFrame(temporal_neighborhood, columns=["time", "activity"])    
+		temporal_graph[activity] = pd.DataFrame(temporal_neighborhood, columns=["time", "activity"])
 	return temporal_graph
 
 
@@ -52,7 +52,7 @@ def node_temporal_feature(node, temporal_graph, time, window):
 			df = valid_rows.copy()
 			df = df[df["activity"] == un]
 			df["time"] = df["time"] - valid_rows["time"].min()
-			s = np.zeros((window+1),int)
+			s = np.zeros((window+1),float)
 			for value in df["time"]:
 				s[value] = 1
 			signature.append(s)
@@ -63,7 +63,7 @@ def node_temporal_feature(node, temporal_graph, time, window):
 				features = np.concatenate((features, signature[i]), axis=0)
 		if features is not None:
 			return features
-	return np.zeros((window+1),int)
+	return np.zeros((window+1),float)
 
 
 def get_feature_given_window(dataframe, tg, window):
@@ -93,10 +93,53 @@ def generate_features(dataframe, tg, n):
 	return df
 
 
-def build_graph(unique_activities, places, encoding, net_places={None}):
+def temporal_embedding(dataframe, temporal_graph, encoding, window):
+	activities = set(dataframe["source"].unique()).union({'|'})
+	embeddings = {}
+
+	df = dataframe.copy()
+	for time, row in df.iterrows():
+		activity = row["source"]
+		if activity not in embeddings:
+			embeddings[activity] = []
+		tg = temporal_graph[activity]
+		temporal_neighbors = tg[(tg["time"] > time-window) & (tg["time"] <= time)].copy()
+		min_time = temporal_neighbors["time"].min()
+		temporal_neighbors["time"] = temporal_neighbors["time"].apply(lambda x : x-min_time)
+		embedding = np.zeros((window), float)
+		for _, row in temporal_neighbors.iterrows():
+			embedding[row["time"]] = encoding[row["activity"]]
+		embeddings[activity].append(embedding)
+
+	end_df = dataframe.copy()
+	end_df = end_df[end_df["destination"]=='|']
+	embeddings['|'] = []
+	for time, row in end_df.iterrows():
+		tg = temporal_graph[activity]
+		temporal_neighbors = tg[(tg["time"] > time-window) & (tg["time"] <= time)].copy()
+		min_time = temporal_neighbors["time"].min()
+		temporal_neighbors["time"] = temporal_neighbors["time"].apply(lambda x : x-min_time)
+		embedding = np.zeros((window), float)
+		for _, row in temporal_neighbors.iterrows():
+			embedding[row["time"]] = encoding[row["activity"]]
+		embeddings['|'].append(embedding)
+
+	features = {}
+	for activity in activities:
+		if activity not in features:
+			features[activity] = np.zeros((window), float)
+		for embedding in embeddings[activity]:
+			features[activity] += embedding
+		assert len(features[activity]) == window
+
+	return features
+
+
+
+
+def build_graph(unique_activities, places, encoding):
 	G = nx.DiGraph()
 
-	y = []
 	nodes = []
 	place_io = []
 	place_in = {}
@@ -106,7 +149,6 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 		if name in unique_activities:
 			G.add_node(name)
 			nodes.append(name)
-			y.append(1)
 
 	for idx, place in enumerate(places):
 		tail = []
@@ -119,7 +161,7 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 			if e != "":
 				head.append(e)
 
-		pname = f"p{idx}"
+		pname = f"place_{idx}"
 		if pname not in place_in:
 			place_in[pname] = set()
 		if pname not in place_out:
@@ -130,7 +172,6 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 		G.add_node(pname)
 		if pname not in nodes:
 			nodes.append(pname)
-			y.append(int(place in net_places))
 
 		for e in tail:
 			G.add_edge(e, pname)
@@ -142,7 +183,7 @@ def build_graph(unique_activities, places, encoding, net_places={None}):
 	assert len(place_in) > 0 and len(place_in) > 0
 	place_io = [place_in, place_out]
 
-	return G, y, nodes, place_io
+	return G, nodes, place_io
 
 
 def draw_networkx(g):
@@ -176,7 +217,7 @@ def get_forward_star(edge_index, node_idx):
 def is_graph_connected(edge_index, mask):
 	if edge_index is None:
 		return False
-		
+
 	neighbors = {}
 	limit = torch.max(edge_index).item()
 	for i in range(limit+1):
@@ -202,7 +243,7 @@ def is_graph_connected(edge_index, mask):
 			for child in children:
 				queue.insert(0, child)
 		visited.add(node)
-			
+
 	return len(visited) == len(neighbors)
 
 
@@ -216,7 +257,7 @@ def get_next_activities(edge_index, idx, mask=None):
 			filter.append(mask[src] and mask[dst])
 
 		edge_index = edge_index[:, filter]
-	
+
 	next_places, _ = get_forward_star(edge_index, idx)
 	for place in next_places:
 		activities, _ = get_forward_star(edge_index, place)
@@ -234,24 +275,34 @@ def check_activity_connection(edge_index, connections, mask):
 
 
 def node_degree(node, edge_index):
-    _, in_deg = get_backward_star(edge_index, node)
-    _, out_deg = get_forward_star(edge_index, node)
-    return in_deg + out_deg
+	_, in_deg = get_backward_star(edge_index, node)
+	_, out_deg = get_forward_star(edge_index, node)
+	return in_deg + out_deg
 
 
 def mean_node_degree(nodes, edge_index):
-    degrees = []
-    for node in nodes:
-        degree = node_degree(node, edge_index)
-        if degree == 0:
-            return None
+	degrees = []
+	for node in nodes:
+		degree = node_degree(node, edge_index)
+		if degree == 0:
+			return None
 
-        degrees.append(degree)
+		degrees.append(degree)
 
-    return np.mean(degrees)
+	return np.mean(degrees)
 
 
-def add_silent_transitions(edge_index, mask, nodes, ar):
+def std_node_degree(nodes, edge_index):
+	node_degrees = [node_degree(node, edge_index) for node in nodes]
+	mean_degree = mean_node_degree(nodes, edge_index)
+	std = 0
+	if mean_degree is not None:
+		ss = [(degree-mean_degree)**2 for degree in node_degrees]
+		std = sum(ss)/len(node_degrees)
+	return std
+
+
+def add_silent_transitions(edge_index, nextt, prev, mask, nodes, ar):
 	places = [idx for idx in range(nodes.index('|')+1, len(nodes))]
 
 	direct_succession = ar["direct_succession"]
@@ -262,27 +313,35 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 	for place in places:
 		following_places[place] = set()
 		if mask[place]:
-			forward, _ = get_forward_star(edge_index, place)
+			forward = [nodes.index(act) for act in nextt[nodes[place]]]
 			for activity in forward:
-				next_places, _ = get_forward_star(edge_index, activity)
+				next_places = [nodes.index(plc) for plc in nextt[nodes[activity]]]
 				for np in next_places:
 					if mask[np]:
 						following_places[place].add(np)
 						candidate_positions.add((place, np))
-	
+
 	no_silent = 0
 	new_idx = torch.max(edge_index) + 1
 	new_nodes = []
 	new_arcs = [[],[]]
 
+	already_connected = set()
+	chosen_candidates = set()
+
 	for position in candidate_positions:
 		src, dst = position
 
-		backward, _ = get_backward_star(edge_index, src)
-		forward, _ = get_forward_star(edge_index, dst)
+		backward = [nodes.index(act) for act in prev[nodes[src]]]
+		forward = [nodes.index(act) for act in nextt[nodes[dst]]]
 
 		for b in backward:
 			for f in forward:
+				if (b,f) in already_connected or (f,b) in already_connected:
+					continue
+				already_connected.add((b,f))
+				chosen_candidates.add(position)
+
 				if nodes[b] in direct_succession and nodes[f] in direct_succession[nodes[b]]:
 					new_nodes.append("silent_" + str(no_silent))
 					new_arcs[0].append(src)
@@ -301,5 +360,62 @@ def add_silent_transitions(edge_index, mask, nodes, ar):
 		edge_index = torch.cat((edge_index, new_edge_index), dim=1)
 
 		nodes = nodes + new_nodes
+		mask = mask + [True]*len(new_nodes)
+
+	print(f"\nadded {len(chosen_candidates)}/{len(candidate_positions)} silent transitions")
+	return edge_index, nodes, mask
+
+
+def get_activity_order(edge_index, nodes):
+	order = []
+	queue = [torch.min(edge_index).item()]
+	visited = set()
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			order.append(current)
+			for i in range(len(edge_index[0])):
+				if edge_index[0][i].item() == current:
+					queue.append(edge_index[1][i].item())
+			visited.add(current)
+
+	return [i for i in order if i <= nodes.index('|')]
 	
-	return edge_index, nodes
+
+def get_next_nodes(edge_index, nodes):
+	queue = [torch.min(edge_index).item()]
+	visited = set()
+
+	followers = {node:set() for node in nodes}
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			for i in range(len(edge_index[0])):
+				if edge_index[0][i].item() == current:
+					queue.append(edge_index[1][i].item())
+					followers[nodes[current]].add(nodes[edge_index[1][i].item()])
+			visited.add(current)
+
+	return followers
+
+
+def get_prev_nodes(edge_index, nodes):
+	swapped_edge_index = edge_index.clone()
+	swapped_edge_index = swapped_edge_index[[1,0]]
+	queue = [nodes.index('|')]
+	visited = set()
+
+	predecessors = {node:set() for node in nodes}
+
+	while queue:
+		current = queue.pop(0)
+		if current not in visited:
+			for i in range(len(swapped_edge_index[0])):
+				if swapped_edge_index[0][i].item() == current:
+					queue.append(swapped_edge_index[1][i].item())
+					predecessors[nodes[current]].add(nodes[swapped_edge_index[1][i].item()])
+			visited.add(current)
+
+	return predecessors

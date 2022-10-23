@@ -23,7 +23,6 @@ from pm4py.algo.evaluation.simplicity import algorithm as simplicity_evaluator
 from pm4py.algo.evaluation import replay_fitness
 from pm4py.algo.discovery.alpha import algorithm as alpha
 from pm4py.algo.analysis.woflan import algorithm as woflan
-from pm4py.statistics.traces.generic.log import case_statistics
 
 
 def generate_trees(parameters):
@@ -38,7 +37,11 @@ def generate_log(tree, no_traces):
 
 def log_to_dataframe(log):
     dataframe = log_converter.apply(log, variant=log_converter.Variants.TO_DATA_FRAME)
+    if "time:timestamp" not in dataframe:
+        dataframe["time:timestamp"] = range(len(dataframe))
+    dataframe = dataframe.drop(dataframe.columns[~dataframe.columns.isin(["concept:name", "time:timestamp", "case:concept:name"])],axis=1)
     dataframe = dataframe.rename({"concept:name":"activity","time:timestamp":"timestamp","case:concept:name":"case"}, axis=1)
+    dataframe["activity"] = dataframe["activity"].apply(lambda x: x.replace(" ", "_"))
     return dataframe
 
 
@@ -111,8 +114,8 @@ def get_variants_parsed(log, top=None):
     variants_log = pm4py.get_variants_as_tuples(log)
     variants = list()
     for variant_log in variants_log:
-        vl = list(variant_log)
-        vl = ['<'] + vl + ['|']
+        vl = [activity.replace(" ", "_") for activity in list(variant_log)]
+        vl = ['>'] + vl + ['|']
         variants.append(vl)
 
     return variants
@@ -126,10 +129,21 @@ def get_variants_distribution_parsed(log):
     variants = []
     for variant in variants_count:
         v = variant['variant'].split(',')
-        v.insert(0, '<')
+        v.insert(0, '>')
         v.append('|')
         c = variant['count']
         d = {'variant': v, 'count': c/total}
         variants.append(d)
 
     return variants
+
+
+
+def filter_log_perc(log, min_perc=0.2):
+    filtered_log = pm4py.filter_variants_by_coverage_percentage(log, min_perc)
+    return filtered_log
+
+
+def filter_log_top_k(log, k=30):
+    filtered_log = pm4py.filter_variants_top_k(log, k)
+    return filtered_log
