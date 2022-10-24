@@ -42,6 +42,9 @@ def log_to_dataframe(log):
     dataframe = dataframe.drop(dataframe.columns[~dataframe.columns.isin(["concept:name", "time:timestamp", "case:concept:name"])],axis=1)
     dataframe = dataframe.rename({"concept:name":"activity","time:timestamp":"timestamp","case:concept:name":"case"}, axis=1)
     dataframe["activity"] = dataframe["activity"].apply(lambda x: x.replace(" ", "_"))
+    convert_case = {case:i for i,case in enumerate(dataframe["case"].unique())}
+    dataframe["case"] = (dataframe["case"].map(convert_case)).astype("int")
+    dataframe.reset_index(inplace=True, drop=True)
     return dataframe
 
 

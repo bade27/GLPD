@@ -10,6 +10,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 
 
@@ -86,7 +87,7 @@ def get_feature_given_window(dataframe, tg, window):
 	return df
 
 
-def generate_features(dataframe, tg, n):
+def generate_features(dataframe, tg, n=0):
 	df = dataframe.copy()
 	for i in range(1, n+1):
 		df = get_feature_given_window(df, tg, i)

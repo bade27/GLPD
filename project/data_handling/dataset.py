@@ -180,12 +180,16 @@ class Dataset():
 					# log = pm4py.play_out(net, im, fm, parameters={"no_traces":no_traces})
 				else:
 					log = self.log
+					print(f"\noriginal number of traces {len(log)}")
 					df_from_log = pm4py.convert_to_dataframe(log)
 					df_frequent_act = df_from_log["concept:name"].value_counts()
 					top_18 = df_frequent_act.sort_values(ascending=False)[:18]
 					df_from_log = df_from_log[df_from_log["concept:name"].isin(top_18.index)]
 					assert 0 < len(df_from_log["concept:name"].unique()) <= 18
 					log = pm4py.convert_to_event_log(df_from_log)
+					filtered_log = pm4py.filter_variants_top_k(log, 30)
+					log = filtered_log
+					print(f"filtered number of traces {len(log)}")
 				
 				unique_activities = set()
 
@@ -198,15 +202,26 @@ class Dataset():
 				# unique_activities = set([transition.name for transition in net.transitions])
 
 				# insert special activities '>' (start) and '|' (finish)
-				df_start_finish = pd.DataFrame()
-				for case in df["case"].unique():
-					current_case = df[df["case"]==case].copy()
-					df_start = pd.DataFrame({"activity":'>', "timestamp":0, "case":case},index=[0])
-					df_finish = pd.DataFrame({"activity":'|', "timestamp":0, "case":case},index=[0])
-					df_start_finish = pd.concat([df_start_finish, df_start], axis=0)
-					df_start_finish = pd.concat([df_start_finish, current_case], axis=0)
-					df_start_finish = pd.concat([df_start_finish, df_finish], axis=0)
-					df_start_finish.reset_index(drop=True,inplace=True)
+				print("inserting special activities...", end=' ')
+				unique_cases = list(df["case"].unique())
+				s = df.groupby('case')
+				df_start_finish = pd.concat(
+					[pd.concat([
+						pd.DataFrame({'activity': [">"], "timestamp":[0], "case":[unique_cases[k]]}),
+						i,
+						pd.DataFrame({'activity': ["|"], "timestamp":[0], "case":[unique_cases[k]]})]
+					) for k, i in s])
+				df_start_finish.reset_index(inplace=True, drop=True)
+				print("done")
+
+				# for case in df["case"].unique():
+				# 	current_case = df[df["case"]==case].copy()
+				# 	df_start = pd.DataFrame({"activity":'>', "timestamp":0, "case":case},index=[0])
+				# 	df_finish = pd.DataFrame({"activity":'|', "timestamp":0, "case":case},index=[0])
+				# 	df_start_finish = pd.concat([df_start_finish, df_start], axis=0)
+				# 	df_start_finish = pd.concat([df_start_finish, current_case], axis=0)
+				# 	df_start_finish = pd.concat([df_start_finish, df_finish], axis=0)
+				# 	df_start_finish.reset_index(drop=True,inplace=True)
 
 				unique_activities.add('>')
 				unique_activities.add('|')
@@ -215,11 +230,15 @@ class Dataset():
 				new_df = build_arcs_dataframe(df_start_finish)
 
 				# alpha relations
+				print("getting alpha relations...", end=' ')
 				dict_alpha_relations = get_alpha_relations(log, depth=depth)
+				print("done")
 
 				# net_places = find_actual_places(net) # places of the original net
 
+				print("adding places...", end=' ')
 				places = add_places(dict_alpha_relations, further_than_one_hop=False) # places of the input net
+				print("done")
 
 				# input net
 				input_net, input_im, input_fm = build_net_from_places(unique_activities, places)
@@ -255,13 +274,20 @@ class Dataset():
 				assert len(edge_index[0]) == len(edge_index[1])
 
 				# temporal graph
+				print("building temporal graph...", end=' ')
 				temporal_graph = build_temp_graph(new_df)
 				new_df["log"] = number_of_models
 				new_df["state_label"] = [0 for _ in range(len(new_df))]
 				df_correct_order = new_df[self.columns]
-				new_df_features = generate_features(df_correct_order, temporal_graph, 1)#model_structure.window_size)
+				
+				if self.type_of_features == "tgn":
+					new_df_features = generate_features(df_correct_order, temporal_graph, model_structure.window_size)
+				else:
+					new_df_features = generate_features(df_correct_order, temporal_graph)
+
 				data = pd.concat([data, new_df_features], axis=0)
 				data.reset_index(drop=True, inplace=True)
+				print("done")
 				
 				if visualize_nets:
 					draw_networkx(graph)
@@ -314,6 +340,7 @@ class Dataset():
 						assert x.shape[1] == w
 					else:
 						w = model_structure.window_size
+						print("getting temporal embeddings...", end=' ')
 						features = temporal_embedding(new_df, temporal_graph, encoding, w)
 						x_list = [None for _ in range(len(nodes))]
 						for position, node in enumerate(nodes):
@@ -326,11 +353,12 @@ class Dataset():
 
 						assert x.shape[0] == h
 						assert x.shape[1] == model_structure.window_size
+						print("done")
 	
 					torch.save(x, os.path.join(self.raw_dir, "x_" + str(number_of_models).zfill(pad) + ".pt"))
 
 
-
+				print("saving files...", end=' ')
 				nodes_file_name = os.path.join(self.graph_nodes_dir, "nodes_" + str(number_of_models).zfill(pad))
 				dump_to_pickle(nodes_file_name, nodes)
 
@@ -352,6 +380,7 @@ class Dataset():
 				save_log_xes(log, os.path.join(self.logs_dir, "log_" + str(number_of_models).zfill(pad) + '.xes'))
 
 				number_of_models += 1
+				print("done")
 
 			# rename activities
 			data["source"] = data["source"].map(encoding)
