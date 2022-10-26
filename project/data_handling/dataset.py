@@ -187,8 +187,8 @@ class Dataset():
 					df_from_log = df_from_log[df_from_log["concept:name"].isin(top_18.index)]
 					assert 0 < len(df_from_log["concept:name"].unique()) <= 18
 					log = pm4py.convert_to_event_log(df_from_log)
-					filtered_log = pm4py.filter_variants_top_k(log, 30)
-					log = filtered_log
+					# filtered_log = pm4py.filter_variants_top_k(log, 30)
+					# log = filtered_log
 					print(f"filtered number of traces {len(log)}")
 				
 				unique_activities = set()
@@ -311,12 +311,17 @@ class Dataset():
 				if save_networkx:
 					dump_to_pickle(os.path.join(self.networkx_dir, 'gx_' + str(number_of_models).zfill(pad)), graph)
 
-
+				print("prasing variants...", end=' ')
 				variants = get_variants_parsed(log, k)
+				print("done")
 
+				print("getting activity order...",end=' ')
 				activity_order = get_activity_order(original_edge_index, nodes)
+				print("done")
+				print("next and prev nodes...", end=' ')
 				next_nodes = get_next_nodes(original_edge_index, nodes)
 				prev_nodes = get_prev_nodes(original_edge_index, nodes)
+				print("done")
 
 				# save files
 				torch.save(edge_index, os.path.join(self.raw_dir, "graph_" + str(number_of_models).zfill(pad) + ".pt"))

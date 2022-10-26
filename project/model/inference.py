@@ -129,8 +129,8 @@ def infer(data_dir, log_filename, model_filename, silent_transitions=False, prep
 # model_filename = "/home/linuxpc/Documenti/TESI/best_model/self_supervised_97.pt"
 # infer(data_dir, log_filename, model_filename, silent_transitions=True)
 
-real_logs_dir = "D:\\MEGA\\MEGAsync\\my_project\\"
-model_path = "D:\\MEGA\\MEGAsync\\trained_model\\best_model\\self_supervised_97.pt"
+real_logs_dir = "D:\\Vario\\TESI_IMMAGINI_E_RISULTATI\\my_project\\"
+model_path = "D:\\Vario\\TESI_IMMAGINI_E_RISULTATI\\trained_model\\best_model\\self_supervised_97.pt"
 for folder in os.listdir(real_logs_dir):
 	log_filename = [file for file in os.listdir(os.path.join(real_logs_dir, folder)) if "xes" in file][0]
 	dirdir = os.path.join(real_logs_dir, folder)

@@ -23,6 +23,7 @@ from pm4py.algo.evaluation.simplicity import algorithm as simplicity_evaluator
 from pm4py.algo.evaluation import replay_fitness
 from pm4py.algo.discovery.alpha import algorithm as alpha
 from pm4py.algo.analysis.woflan import algorithm as woflan
+from tqdm import tqdm
 
 
 def generate_trees(parameters):
@@ -111,12 +112,16 @@ def get_variants(log, reverse=True):
 
 def get_variants_parsed(log, top=None):
     if top != None:
+        print(f"filtering top {top} variants...", end=' ')
         filtered_log = pm4py.filter_variants_top_k(log, top)
         log = filtered_log
-        
+        print("done")
+
+    print("getting variants as tuples...", end=' ')
     variants_log = pm4py.get_variants_as_tuples(log)
+    print("done")
     variants = list()
-    for variant_log in variants_log:
+    for variant_log in tqdm(variants_log):
         vl = [activity.replace(" ", "_") for activity in list(variant_log)]
         vl = ['>'] + vl + ['|']
         variants.append(vl)

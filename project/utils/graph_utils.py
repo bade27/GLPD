@@ -99,7 +99,7 @@ def temporal_embedding(dataframe, temporal_graph, encoding, window):
 	embeddings = {}
 
 	df = dataframe.copy()
-	for time, row in df.iterrows():
+	for time, row in tqdm(df.iterrows()):
 		activity = row["source"]
 		if activity not in embeddings:
 			embeddings[activity] = []
@@ -115,7 +115,8 @@ def temporal_embedding(dataframe, temporal_graph, encoding, window):
 	end_df = dataframe.copy()
 	end_df = end_df[end_df["destination"]=='|']
 	embeddings['|'] = []
-	for time, row in end_df.iterrows():
+	for time, row in tqdm(end_df.iterrows()):
+		activity = row["source"]
 		tg = temporal_graph[activity]
 		temporal_neighbors = tg[(tg["time"] > time-window) & (tg["time"] <= time)].copy()
 		min_time = temporal_neighbors["time"].min()
