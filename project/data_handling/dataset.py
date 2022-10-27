@@ -14,7 +14,7 @@ from tqdm import tqdm
 import networkx as nx
 from utils.general_utils import create_dirs, dump_to_pickle, create_dirs, split_move_files
 from utils.petri_net_utils import add_places, get_alpha_relations, build_net_from_places, reduce_silent_transitions
-from utils.pm4py_utils import display_petri_net, generate_trees, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml, load_log_xes
+from utils.pm4py_utils import display_petri_net, generate_trees, get_variants_parsed, log_to_dataframe, save_log_xes, save_petri_net_to_img, save_petri_net_to_pnml, load_log_xes, behavior
 from utils.graph_utils import build_arcs_dataframe, build_graph, build_temp_graph, generate_features, temporal_embedding, draw_networkx, get_backward_star, get_forward_star, mean_node_degree, std_node_degree, get_activity_order, get_next_nodes, get_prev_nodes
 from sklearn.cluster import KMeans
 import model.structure as model_structure
@@ -174,6 +174,7 @@ class Dataset():
 					net, im, fm = reduce_silent_transitions(net_ws, im_ws, fm_ws)
 					log = pm4py.play_out(
                         net, im, fm, parameters={"no_traces":no_traces})
+					print(f"\noriginal number of traces {len(log)}")
 					# net, im, fm = pm4py.discover_petri_net_alpha(log)
 					# if not is_sound(net, im, fm):
 					#     continue
@@ -187,9 +188,16 @@ class Dataset():
 					df_from_log = df_from_log[df_from_log["concept:name"].isin(top_18.index)]
 					assert 0 < len(df_from_log["concept:name"].unique()) <= 18
 					log = pm4py.convert_to_event_log(df_from_log)
-					# filtered_log = pm4py.filter_variants_top_k(log, 30)
-					# log = filtered_log
-					print(f"filtered number of traces {len(log)}")
+				
+				top_variants, _ = behavior(log, 0.8)
+				top = len(top_variants)
+				if top < 30:
+					top = 30
+				elif top > 75:
+					top = 75
+				filtered_log = pm4py.filter_variants_top_k(log, top)
+				log = filtered_log
+				print(f"filtered number of traces {len(log)}, that represent the top {top} traces")
 				
 				unique_activities = set()
 
@@ -313,6 +321,7 @@ class Dataset():
 
 				print("prasing variants...", end=' ')
 				variants = get_variants_parsed(log, k)
+				assert len(variants) == k
 				print("done")
 
 				print("getting activity order...",end=' ')

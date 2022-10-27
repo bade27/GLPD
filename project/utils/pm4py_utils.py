@@ -24,6 +24,7 @@ from pm4py.algo.evaluation import replay_fitness
 from pm4py.algo.discovery.alpha import algorithm as alpha
 from pm4py.algo.analysis.woflan import algorithm as woflan
 from tqdm import tqdm
+import numpy as np
 
 
 def generate_trees(parameters):
@@ -155,3 +156,62 @@ def filter_log_perc(log, min_perc=0.2):
 def filter_log_top_k(log, k=30):
     filtered_log = pm4py.filter_variants_top_k(log, k)
     return filtered_log
+
+
+def get_traces_as_lists(log):
+    traces = []
+    for trace in log:
+        activities = []
+        for event in trace:
+            activities.append(event["concept:name"])
+        traces.append(activities)
+    return traces
+
+
+def traces_as_strings(traces):
+    string_traces = []
+    for trace in traces:
+        string_traces.append(''.join(trace))
+    return string_traces
+
+
+def count_activities(log):
+    traces = get_traces_as_lists(log)
+    activities = set()
+    for trace in traces:
+        for activity in trace:
+            activities.add(activity)
+    return len(activities)
+
+
+def count_variants(log):
+    traces = traces_as_strings(get_traces_as_lists(log))
+    freq = {}
+    for trace in traces:
+        freq[trace] = freq.get(trace, 0) + 1
+    return freq
+
+
+def get_frequency_data(log):
+    freq_dict = count_variants(log)
+    freq_dict_sorted = {k: v for k, v in sorted(freq_dict.items(), key=lambda item: item[1], reverse=True)}
+    mapping = {k:i+1 for i, k in enumerate(freq_dict_sorted.keys())}
+    y = np.array([frequency for frequency in freq_dict_sorted.values()])
+    x = np.array([i for i in mapping.values()])
+    assert x.size == y.size
+    return x, y, mapping
+
+
+def behavior(log, perc=0.9):
+    x, y, _ = get_frequency_data(log)
+    z = [f/sum(y) for f in y]
+
+    threshold = 0
+    for i in range(len(z)):
+        if sum(z[:i]) < perc:
+            threshold = i
+
+    main_behavior = x[:threshold]
+    dev_behavior = x[threshold:]
+
+    return main_behavior, dev_behavior
