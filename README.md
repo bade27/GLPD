@@ -1,1 +1,1 @@
-# GraphLearningForProcessDiscovery
+# Graph Learning For Process Discovery
