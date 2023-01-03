@@ -1,3 +1,3 @@
 # Graph Learning For Process Discovery
 
-Master Thesis' project
+Master's Thesis project AA 2021-2022
