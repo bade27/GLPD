@@ -38,8 +38,8 @@ best_model_dir = os.path.join(base_dir, "..", "best_model")
 # dataset.clean_dataset_and_split()
 # copy_dir(base_dir, copy_after_split)
 
-# trainer = Trainer(base_dir, do_train=True, optimizer_name="SGD", lr=1e-4, gnn_type="gcn", momentum=0.0)
-# trainer.train(100, 10, 30)
+trainer = Trainer(base_dir, do_train=True, optimizer_name="SGD", lr=1e-4, gnn_type="gcn", momentum=0.0)
+trainer.train(100, 10, 30)
 
 model_path = os.path.join(best_model_dir, os.listdir(best_model_dir)[0])
 print(base_dir)

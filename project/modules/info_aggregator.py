@@ -45,6 +45,14 @@ class InfoAggregator(torch.nn.Module):
                 #             in_variant_followers[follower].add(next_activity_idx)
 
                 next_places = nextt[activity]
+                next_places = nextt[activity]
+                selected_next_places = []
+                for np in next_places:
+                    for np_act in activities[ii+1:]:
+                        if np_act in nextt[np]:
+                            selected_next_places.append(np)
+                            break
+                
                 selected_next_places = [np for np in next_places if nextt[np] in activities[ii+1:]]
 
                 # considered_places = set()
